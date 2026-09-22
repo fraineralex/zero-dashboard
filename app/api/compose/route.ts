@@ -5,6 +5,8 @@ import { z } from "zod";
 import { dashboardCatalog } from "@/lib/dashboard/catalog";
 import { resolveCandidates } from "@/lib/dashboard/candidates";
 import { buildIntentSpec } from "@/lib/dashboard/specs";
+import { deterministicCapabilityDecision, evaluateCapabilityDecision } from "@/lib/ui-memory/decision";
+import { findUiRecipe } from "@/lib/ui-memory/registry";
 import type { AnalyticsContext, DashboardSpec } from "@/types/analytics";
 
 export const runtime = "nodejs";
@@ -56,6 +58,7 @@ export async function POST(request: Request) {
   const context = payload.context as AnalyticsContext;
   const resolved = resolveCandidates(context, payload.intent);
   const fallback = buildIntentSpec(payload.intent, context, payload.initialSpec);
+  const memoryRecipe = findUiRecipe(payload.intent);
   const apiKey = process.env.AI_GATEWAY_API_KEY;
   const encoder = new TextEncoder();
 
@@ -73,6 +76,7 @@ export async function POST(request: Request) {
             candidateCount: resolved.candidates.length,
             resolverMs: resolved.resolverMs,
             stopReason: "no-ai-gateway-key",
+            uiMemory: deterministicCapabilityDecision(memoryRecipe),
           },
         });
         send({ type: "complete", spec: fallback });
@@ -82,6 +86,12 @@ export async function POST(request: Request) {
 
       try {
         const evaluate = experimental_createEvaluator({ model: "typesafe-ai/jev", apiKey, timeoutMs: 10_000 });
+        let uiMemory = deterministicCapabilityDecision(memoryRecipe);
+        try {
+          uiMemory = await evaluateCapabilityDecision(payload.intent, memoryRecipe, evaluate, AbortSignal.timeout(4_500));
+        } catch {
+          // Composition remains available when the optional capability preflight times out.
+        }
         for await (const event of experimental_composeSpec({
           catalog: dashboardCatalog,
           candidates: resolved.candidates,
@@ -94,7 +104,7 @@ export async function POST(request: Request) {
           maxSteps: 12,
           maxElements: 20,
           maxDepth: 4,
-          signal: AbortSignal.timeout(28_000),
+          signal: AbortSignal.timeout(22_000),
           instructions: {
             root: "Keep one continuous analytical canvas. Reconfigure the existing layout instead of modeling navigation to another page.",
             next: "Choose only configured evidence that answers the request. Preserve useful existing elements when the user asks to add, remove, compare, or restyle a measure.",
@@ -102,9 +112,9 @@ export async function POST(request: Request) {
           },
         })) {
           if (event.type === "step") {
-            send({ type: "step", spec: event.spec, diagnostics: { mode: "jev", candidateCount: resolved.candidates.length, resolverMs: resolved.resolverMs } });
+            send({ type: "step", spec: event.spec, diagnostics: { mode: "jev", candidateCount: resolved.candidates.length, resolverMs: resolved.resolverMs, uiMemory } });
           } else {
-            send({ type: "complete", spec: event.spec, diagnostics: { mode: "jev", stopReason: event.stopReason } });
+            send({ type: "complete", spec: event.spec, diagnostics: { mode: "jev", stopReason: event.stopReason, uiMemory } });
           }
         }
       } catch {

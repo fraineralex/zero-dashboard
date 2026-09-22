@@ -51,6 +51,18 @@ export type MetricDatum = {
 
 export type ChartDatum = Record<string, string | number>;
 
+export type CustomerBillingProfile = {
+  id: string;
+  name: string;
+  segment: Customer["segment"];
+  status: Customer["status"];
+  current: number;
+  previous: number;
+  change: number;
+  annualized: number;
+  history: { month: string; value: number }[];
+};
+
 export type AnalyticsSnapshot = {
   months: string[];
   accounting: {
@@ -90,6 +102,7 @@ export type AnalyticsSnapshot = {
     atRisk: number;
     top: ChartDatum[];
     decliners: ChartDatum[];
+    billingProfiles: CustomerBillingProfile[];
   };
   retention: {
     churnRate: number;
@@ -151,4 +164,10 @@ export type CompositionDiagnostics = {
   firstSpecMs: number;
   totalMs: number;
   stopReason?: string;
+  uiMemory?: {
+    decision: "reuse_recipe" | "compose_existing" | "generate_recipe";
+    source: "jev" | "deterministic";
+    recipeId?: string;
+    recipeVersion?: number;
+  };
 };

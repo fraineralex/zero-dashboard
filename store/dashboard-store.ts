@@ -169,6 +169,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           firstSpecMs: Math.round(firstSpecAt ? firstSpecAt - startedAt : finishedAt - startedAt),
           totalMs: Math.round(finishedAt - startedAt),
           stopReason: latestDiagnostics.stopReason,
+          uiMemory: latestDiagnostics.uiMemory,
         },
       });
     } catch (error) {

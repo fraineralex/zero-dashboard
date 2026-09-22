@@ -1,4 +1,5 @@
 import { analytics } from "@/lib/analytics/engine";
+import { buildUiMemorySpec } from "@/lib/ui-memory/registry";
 import type { AnalyticsContext, DashboardElement, DashboardSpec } from "@/types/analytics";
 
 const usd = (value: number, compact = true) =>
@@ -252,6 +253,8 @@ function accountingIntentSpec(intent: string, normalized: string): DashboardSpec
 
 export function buildIntentSpec(intent: string, context: AnalyticsContext, initialSpec?: DashboardSpec): DashboardSpec {
   const normalized = normalizeIntent(intent);
+  const rememberedSpec = buildUiMemorySpec(intent);
+  if (rememberedSpec) return rememberedSpec;
   const isIncrementalEdit = /agrega|anade|incluye|quita|remueve|elimina|cambia|remove|add|switch/.test(normalized);
   const accountingSpec = isIncrementalEdit ? null : accountingIntentSpec(intent, normalized);
   if (accountingSpec) return accountingSpec;

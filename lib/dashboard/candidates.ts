@@ -16,6 +16,7 @@ const descriptions: Record<string, string> = {
   BarChartCard: "Prepared categorical comparison with application-owned values.",
   ComparisonChart: "Prepared two-series comparison with application-owned values.",
   DataTable: "Prepared ranked records with fixed columns and approved actions.",
+  EntityTrendTable: "UI Memory recipe for identifiable customers with current billing, individual twelve-month trends, search, sorting, and multi-customer comparison.",
   SegmentTable: "Prepared segment performance and deterministic drill-down.",
   InsightCard: "Prepared analytical conclusion already derived by the local engine.",
   FindingCard: "Prepared primary finding for the requested investigation.",

@@ -171,6 +171,20 @@ export function calculateAnalytics(customers = generateDataset()): AnalyticsSnap
         .slice(0, 8)
         .map((customer) => ({ id: customer.id, customer: customer.name, segment: customer.segment, mrr: customer.mrrHistory[11], status: customer.status })),
       decliners: decliners.slice(0, 10),
+      billingProfiles: [...customers]
+        .sort((a, b) => b.mrrHistory[11] - a.mrrHistory[11])
+        .slice(0, 14)
+        .map((customer) => ({
+          id: customer.id,
+          name: customer.name,
+          segment: customer.segment,
+          status: customer.status,
+          current: customer.mrrHistory[11],
+          previous: customer.mrrHistory[10],
+          change: Number(pct(customer.mrrHistory[11], customer.mrrHistory[10]).toFixed(1)),
+          annualized: customer.mrrHistory[11] * 12,
+          history: MONTHS.map((month, index) => ({ month, value: customer.mrrHistory[index] })),
+        })),
     },
     retention: {
       churnRate: (canceled / customers.length) * 100,
