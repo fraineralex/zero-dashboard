@@ -11,6 +11,8 @@ type BaseCardProps = { title: string; description?: string; span?: string };
 type Series = { key: string; label: string; format?: "currency" | "percent" | "number"; axis?: "left" | "right" };
 type ChartRow = Record<string, string | number | boolean | null>;
 
+const spanClass = (span?: string) => span ? `span-${span}` : undefined;
+
 const formatValue = (value: string | number, format?: string) => {
   if (typeof value !== "number") return String(value);
   if (format === "currency") return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(value);
@@ -20,7 +22,7 @@ const formatValue = (value: string | number, format?: string) => {
 
 function CardFrame({ title, description, span, children, className }: BaseCardProps & { children: ReactNode; className?: string }) {
   return (
-    <section className={cn("dashboard-card", span === "wide" && "span-wide", span === "hero" && "span-hero", className)}>
+    <section className={cn("dashboard-card", spanClass(span), className)}>
       <header className="card-heading">
         <div><h2>{title}</h2>{description ? <p>{description}</p> : null}</div>
       </header>
@@ -52,8 +54,8 @@ export function MetricCard({ props }: { props: { label: string; value: string; d
       <div className="metric-foot"><span className={cn("metric-delta", `tone-${tone}`)}><Icon size={13} />{props.delta}</span><span>{props.helper}</span></div>
     </>
   );
-  if (props.action) return <button className={cn("metric-card dashboard-card", props.span === "hero" && "span-hero")} onClick={() => navigate(props.action as "revenue" | "customers" | "retention" | "acquisition")}>{content}</button>;
-  return <section className={cn("metric-card dashboard-card", props.span === "hero" && "span-hero")}>{content}</section>;
+  if (props.action) return <button className={cn("metric-card dashboard-card", spanClass(props.span))} onClick={() => navigate(props.action as "revenue" | "customers" | "retention" | "acquisition")}>{content}</button>;
+  return <section className={cn("metric-card dashboard-card", spanClass(props.span))}>{content}</section>;
 }
 
 function chartConfig(series: Series[]): ChartConfig {
@@ -63,19 +65,37 @@ function chartConfig(series: Series[]): ChartConfig {
 
 export function LineChartCard({ props }: { props: BaseCardProps & { data: ChartRow[]; xKey: string; series: Series[]; format?: string; action?: string } }) {
   const navigate = useDashboardStore((state) => state.navigate);
+  const formats = new Set(props.series.map((item) => item.format ?? props.format ?? "number"));
+  const normalized = formats.size > 1;
+  const normalizedKeys = new Map(props.series.map((item) => [item.key, `${item.key}Normalized`]));
+  const ranges = new Map(props.series.map((item) => {
+    const values = props.data.map((row) => Number(row[item.key] ?? 0));
+    return [item.key, { min: Math.min(...values), max: Math.max(...values) }];
+  }));
+  const chartData = normalized ? props.data.map((row) => ({
+    ...row,
+    ...Object.fromEntries(props.series.map((item) => {
+      const current = Number(row[item.key] ?? 0);
+      const range = ranges.get(item.key)!;
+      const spread = range.max - range.min;
+      return [normalizedKeys.get(item.key)!, spread ? Number((((current - range.min) / spread) * 100).toFixed(2)) : 50];
+    })),
+  })) : props.data;
+  const displaySeries = props.series.map((item) => ({ ...item, displayKey: normalized ? normalizedKeys.get(item.key)! : item.key }));
+  const displayConfig = Object.fromEntries(displaySeries.map((item, index) => [item.displayKey, { label: item.label, color: ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "#d07a42", "#3b8c88"][index] }]));
   const leftSeries = props.series.find((item) => item.axis !== "right") ?? props.series[0];
   const rightSeries = props.series.find((item) => item.axis === "right");
   return (
-    <CardFrame {...props}>
+    <CardFrame {...props} description={normalized ? `${props.description ?? "Comparative movement"} · Normalized range 0–100` : props.description}>
       <button className="chart-action-layer" aria-label={props.action ? `Open ${props.action}` : undefined} onClick={props.action ? () => navigate(props.action as "revenue") : undefined} tabIndex={props.action ? 0 : -1}>
-        <ChartContainer config={chartConfig(props.series)} className="chart-standard" aria-label={`${props.title} chart`}>
-          <LineChart data={props.data} margin={{ top: 12, right: 8, bottom: 0, left: 0 }}>
+        <ChartContainer config={normalized ? displayConfig : chartConfig(props.series)} className="chart-standard" aria-label={`${props.title} chart`}>
+          <LineChart data={chartData} margin={{ top: 12, right: 8, bottom: 0, left: 0 }}>
             <CartesianGrid vertical={false} stroke="var(--grid-line)" />
-            <XAxis dataKey={props.xKey} tickLine={false} axisLine={false} tickMargin={10} interval="preserveStartEnd" />
-            <YAxis yAxisId="left" tickLine={false} axisLine={false} width={54} tickFormatter={(value) => formatValue(value, leftSeries?.format ?? props.format)} />
-            {rightSeries ? <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} width={48} tickFormatter={(value) => formatValue(value, rightSeries.format)} /> : null}
-            <ChartTooltip cursor={{ stroke: "var(--border-strong)", strokeDasharray: "3 3" }} content={<ChartTooltipContent formatter={(value, name) => formatValue(value, props.series.find((item) => item.label === name)?.format ?? props.format)} />} />
-            {props.series.map((series, index) => <Line key={series.key} yAxisId={series.axis ?? "left"} dataKey={series.key} type="monotone" stroke={`var(--color-${series.key})`} strokeWidth={index === 0 ? 2.2 : 1.7} strokeDasharray={index > 2 ? "4 3" : undefined} dot={false} activeDot={{ r: 3 }} isAnimationActive={false} />)}
+            <XAxis dataKey={props.xKey} tickLine={false} axisLine={false} tickMargin={10} interval="preserveStartEnd" minTickGap={24} />
+            <YAxis yAxisId="left" domain={normalized ? [0, 100] : undefined} tickLine={false} axisLine={false} width={54} tickFormatter={(value) => normalized ? `${Math.round(value)}` : formatValue(value, leftSeries?.format ?? props.format)} />
+            {!normalized && rightSeries ? <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} width={48} tickFormatter={(value) => formatValue(value, rightSeries.format)} /> : null}
+            <ChartTooltip cursor={{ stroke: "var(--border-strong)", strokeDasharray: "3 3" }} content={<ChartTooltipContent formatter={(value, name, item) => { const source = props.series.find((series) => series.label === name); const actual = normalized && source ? item.payload?.[source.key] : value; return formatValue(actual as string | number, source?.format ?? props.format); }} />} />
+            {displaySeries.map((series, index) => <Line key={series.key} name={series.label} yAxisId={normalized ? "left" : series.axis ?? "left"} dataKey={series.displayKey} type="monotone" stroke={`var(--color-${series.displayKey})`} strokeWidth={index === 0 ? 2.2 : 1.8} strokeDasharray={index > 2 ? "4 3" : undefined} dot={false} activeDot={{ r: 3 }} isAnimationActive={false} />)}
             {props.series.length > 1 ? <ChartLegend verticalAlign="top" height={24} /> : null}
           </LineChart>
         </ChartContainer>
@@ -99,7 +119,7 @@ export function AreaChartCard({ props }: { props: BaseCardProps & { data: ChartR
           <XAxis dataKey={props.xKey} tickLine={false} axisLine={false} tickMargin={10} interval="preserveStartEnd" />
           <YAxis tickLine={false} axisLine={false} width={48} tickFormatter={(value) => formatValue(value, firstSeries?.format ?? props.format)} />
           <ChartTooltip content={<ChartTooltipContent formatter={(value, name) => formatValue(value, props.series.find((item) => item.label === name)?.format ?? props.format)} />} />
-          {props.series.map((series) => <Area key={series.key} dataKey={series.key} type="monotone" stroke={`var(--color-${series.key})`} fill={`url(#fill-${series.key})`} strokeWidth={2} isAnimationActive={false} />)}
+          {props.series.map((series) => <Area key={series.key} name={series.label} dataKey={series.key} type="monotone" stroke={`var(--color-${series.key})`} fill={`url(#fill-${series.key})`} strokeWidth={2} isAnimationActive={false} />)}
           {props.series.length > 1 ? <ChartLegend verticalAlign="top" height={24} /> : null}
         </AreaChart>
       </ChartContainer>
@@ -117,7 +137,7 @@ export function BarChartCard({ props }: { props: BaseCardProps & { data: ChartRo
           {props.horizontal ? <YAxis dataKey={props.xKey} type="category" tickLine={false} axisLine={false} width={96} /> : <XAxis dataKey={props.xKey} tickLine={false} axisLine={false} tickMargin={10} />}
           {props.horizontal ? <XAxis type="number" hide /> : <YAxis tickLine={false} axisLine={false} width={48} tickFormatter={(value) => formatValue(value, firstSeries?.format ?? props.format)} />}
           <ChartTooltip cursor={{ fill: "var(--muted)" }} content={<ChartTooltipContent formatter={(value, name) => formatValue(value, props.series.find((item) => item.label === name)?.format ?? props.format)} />} />
-          {props.series.map((series) => <Bar key={series.key} dataKey={series.key} fill={`var(--color-${series.key})`} radius={props.horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0]} maxBarSize={34} isAnimationActive={false} />)}
+          {props.series.map((series) => <Bar key={series.key} name={series.label} dataKey={series.key} fill={`var(--color-${series.key})`} radius={props.horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0]} maxBarSize={34} isAnimationActive={false} />)}
           {props.series.length > 1 ? <ChartLegend verticalAlign="top" height={24} /> : null}
         </BarChart>
       </ChartContainer>
@@ -128,7 +148,7 @@ export function BarChartCard({ props }: { props: BaseCardProps & { data: ChartRo
 export function InsightCard({ props }: { props: { eyebrow: string; title: string; body: string; stat: string; actionLabel?: string; actionIntent?: string; span?: string; tone?: string } }) {
   const submit = useDashboardStore((state) => state.submitIntent);
   return (
-    <section className={cn("dashboard-card insight-card", props.span === "wide" && "span-wide")}>
+    <section className={cn("dashboard-card insight-card", spanClass(props.span))}>
       <div className="insight-icon"><CircleAlert size={16} /></div>
       <p className="eyebrow">{props.eyebrow}</p>
       <strong className={cn("insight-stat", props.tone === "negative" && "negative")}>{props.stat}</strong>

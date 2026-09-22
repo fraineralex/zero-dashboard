@@ -23,9 +23,9 @@ export function ChartContainer({ config, className, children, ...props }: React.
 export const ChartTooltip = Tooltip;
 export const ChartLegend = Legend;
 
-type TooltipEntry = { dataKey?: string | number; name?: string | number; value?: string | number; color?: string };
+type TooltipEntry = { dataKey?: string | number; name?: string | number; value?: string | number; color?: string; payload?: Record<string, unknown> };
 
-export function ChartTooltipContent({ active, payload, label, formatter }: { active?: boolean; payload?: TooltipEntry[]; label?: string; formatter?: (value: string | number, name: string) => string }) {
+export function ChartTooltipContent({ active, payload, label, formatter }: { active?: boolean; payload?: TooltipEntry[]; label?: string; formatter?: (value: string | number, name: string, item: TooltipEntry) => string }) {
   const { config } = React.useContext(ChartContext);
   if (!active || !payload?.length) return null;
   return (
@@ -38,7 +38,7 @@ export function ChartTooltipContent({ active, payload, label, formatter }: { act
           <div className="chart-tooltip-row" key={key}>
             <span className="chart-tooltip-dot" style={{ background: item.color ?? config[key]?.color }} />
             <span>{name}</span>
-            <strong>{formatter ? formatter(item.value ?? "", name) : item.value}</strong>
+            <strong>{formatter ? formatter(item.value ?? "", name, item) : item.value}</strong>
           </div>
         );
       })}

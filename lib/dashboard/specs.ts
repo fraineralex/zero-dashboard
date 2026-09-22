@@ -33,7 +33,7 @@ function overviewSpec(): DashboardSpec {
     customersTrend: node("AreaChartCard", { title: "New customers", description: "Monthly additions", data: a.months.map((month, i) => ({ month, customers: 98 + i * 4 + (i % 3) * 17 })), xKey: "month", series: [{ key: "customers", label: "Customers" }], format: "number", span: "half" }),
     funnel: node("FunnelCard", { title: "Acquisition funnel", description: "September conversion journey", data: a.acquisition.funnel, span: "half" }),
     churnTrend: node("AreaChartCard", { title: "Churn trend", description: "Monthly customer churn", data: a.retention.history, xKey: "month", series: [{ key: "churn", label: "Churn" }], format: "percent", span: "half" }),
-    risk: node("InsightCard", { eyebrow: "Suggested from your data", title: "Enterprise MRR fell sharply", body: `${usd(Math.abs(a.enterprise.current - a.enterprise.previous))} less MRR than August. Acme and Meridian account for most of the decline.`, stat: delta(a.enterprise.delta), actionLabel: "Investigate decline", actionIntent: "Show me why enterprise revenue dropped this month", span: "half", tone: "negative" }),
+    risk: node("InsightCard", { eyebrow: "Suggested from your data", title: "Enterprise MRR fell sharply", body: `${usd(Math.abs(a.enterprise.current - a.enterprise.previous))} less MRR than August. Acme and Meridian account for most of the decline.`, stat: delta(a.enterprise.delta), actionLabel: "Investigate decline", actionIntent: "Show me why enterprise revenue dropped this month", span: "wide", tone: "negative" }),
   }, ["revenue", "customers", "churn", "conversion", "trend", "plans", "customersTrend", "funnel", "churnTrend", "risk"]);
 }
 
@@ -42,13 +42,15 @@ function revenueSpec(context: AnalyticsContext): DashboardSpec {
   if (context.segment === "Enterprise") return enterpriseSpec(context);
   return spec("AnalysisGrid", "Revenue", "September 2026 · All segments", {
     summary: node("MetricCard", { label: "Monthly revenue", value: usd(a.revenue.current), delta: delta(a.revenue.delta), tone: a.revenue.delta < 0 ? "negative" : "positive", helper: `Previous ${usd(a.revenue.previous)}`, span: "hero" }),
+    previous: node("MetricCard", { label: "Previous period", value: usd(a.revenue.previous), delta: "August", tone: "neutral", helper: "Comparison baseline" }),
+    movementValue: node("MetricCard", { label: "Net movement", value: usd(a.revenue.current - a.revenue.previous), delta: delta(a.revenue.delta), tone: a.revenue.delta < 0 ? "negative" : "positive", helper: "Month over month" }),
     trend: node("LineChartCard", { title: "Revenue over time", description: "Monthly recurring revenue", data: a.revenue.history, xKey: "month", series: [{ key: "revenue", label: "Revenue" }], format: "currency", span: "wide" }),
     plan: node("BarChartCard", { title: "Revenue by plan", description: "Click Enterprise in the segment control to drill down", data: a.revenue.byPlan, xKey: "name", series: [{ key: "value", label: "MRR" }], format: "currency", span: "half" }),
     country: node("BarChartCard", { title: "Top countries", description: "Current MRR by billing country", data: a.revenue.byCountry.slice(0, 5), xKey: "name", series: [{ key: "value", label: "MRR" }], format: "currency", span: "half", horizontal: true }),
     movement: node("MovementCard", { title: "MRR movement", description: "What changed since August", data: a.revenue.movement, span: "half" }),
     segments: node("SegmentTable", { title: "Segment performance", description: "Enterprise is the largest negative contributor", data: a.revenue.bySegment.map((row) => ({ ...row, change: row.name === "Enterprise" ? a.enterprise.delta.toFixed(1) : row.name === "Growth" ? 3.4 : 1.8 })), span: "half" }),
     customers: node("DataTable", { title: "Largest customers", description: "Ranked by current MRR", data: a.customers.top, columns: [{ key: "customer", label: "Customer" }, { key: "segment", label: "Segment" }, { key: "mrr", label: "MRR", format: "currency" }, { key: "status", label: "Status" }], span: "wide", rowAction: "customer" }),
-  }, ["summary", "trend", "plan", "country", "movement", "segments", "customers"]);
+  }, ["summary", "previous", "movementValue", "trend", "plan", "country", "movement", "segments", "customers"]);
 }
 
 function enterpriseSpec(context: AnalyticsContext): DashboardSpec {
@@ -238,9 +240,10 @@ export function buildIntentSpec(intent: string, context: AnalyticsContext, initi
   return spec("AnalysisGrid", "Custom analytical canvas", `Reconfigured from “${intent.slice(0, 86)}${intent.length > 86 ? "…" : ""}”`, {
     primary: node("MetricCard", { label: primary.label, value: primary.format === "currency" ? usd(Number(latest?.[primary.key] ?? 0)) : formatValueForMetric(Number(latest?.[primary.key] ?? 0), primary.format), delta: "+2.4%", tone: "positive", helper: "Latest period", span: "hero" }),
     dimensions: node("MetricCard", { label: "Combined measures", value: String(series.length), delta: "Live", tone: "neutral", helper: "One line per measure" }),
-    chart: node(chartType, { title: series.map((item) => item.label).join(" vs "), description: "Combined on one canvas · right axis for rates and counts", data: monthlyData, xKey: "month", series, format: primary.format, span: "wide" }),
-    note: node("InsightCard", { eyebrow: "Flexible composition", title: "This view was assembled from your request", body: "Ask to add or remove a measure, switch to bars or area, change the time grain, or focus on a customer segment.", stat: `${series.length} series`, span: "half", tone: "positive" }),
-  }, ["primary", "dimensions", "chart", "note"]);
+    grain: node("MetricCard", { label: "Time grain", value: "12 mo", delta: "Monthly", tone: "neutral", helper: "Comparable timeline" }),
+    chart: node(chartType, { title: series.map((item) => item.label).join(" vs "), description: "Combined on one canvas", data: monthlyData, xKey: "month", series, format: primary.format, span: "wide" }),
+    note: node("InsightCard", { eyebrow: "Flexible composition", title: "This view was assembled from your request", body: "Ask to add or remove a measure, switch to bars or area, change the time grain, or focus on a customer segment.", stat: `${series.length} series`, span: "wide", tone: "positive" }),
+  }, ["primary", "dimensions", "grain", "chart", "note"]);
 }
 
 function formatValueForMetric(value: number, format: CustomSeries["format"]) {
