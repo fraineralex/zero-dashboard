@@ -184,6 +184,13 @@ function requestedSeries(intent: string, daily: boolean): CustomSeries[] {
   add({ key: "churn", label: "Churn", format: "percent", axis: "right" }, /churn|abandono|cancelacion/);
   add({ key: "nrr", label: "NRR", format: "percent", axis: "right" }, /nrr|retencion|retention/);
   add({ key: "conversion", label: "Conversion", format: "percent", axis: "right" }, /conversion/);
+  add({ key: "totalExpenses", label: "Total expenses", format: "currency" }, /gasto|expense|egreso|coste|costo/);
+  add({ key: "grossProfit", label: "Gross profit", format: "currency" }, /utilidad bruta|beneficio bruto|gross profit/);
+  add({ key: "netProfit", label: "Net profit", format: "currency" }, /utilidad neta|beneficio neto|net profit|resultado neto/);
+  add({ key: "receivables", label: "Accounts receivable", format: "currency" }, /cuenta(s)? por cobrar|receivable|cxc/);
+  add({ key: "payables", label: "Accounts payable", format: "currency" }, /cuenta(s)? por pagar|payable|cxp/);
+  add({ key: "cashBalance", label: "Cash balance", format: "currency" }, /saldo de caja|cash balance|efectivo disponible/);
+  add({ key: "taxes", label: "Taxes", format: "currency" }, /impuesto|tax|iva/);
   return matches;
 }
 
@@ -194,20 +201,77 @@ function customChartType(intent: string) {
   return "LineChartCard";
 }
 
+function accountingIntentSpec(intent: string, normalized: string): DashboardSpec | null {
+  const a = analytics.accounting;
+  const receivables = /cuenta(s)? por cobrar|receivable|cxc|factura(s)? vencida|overdue invoice/.test(normalized);
+  const payables = /cuenta(s)? por pagar|payable|cxp/.test(normalized);
+  if (receivables && payables) {
+    return spec("AnalysisGrid", "Working capital control", `Reconfigured from “${intent}”`, {
+      receivables: node("MetricCard", { label: "Accounts receivable", value: usd(a.receivables), delta: "74 invoices", tone: "neutral", helper: "Open customer balances" }),
+      payables: node("MetricCard", { label: "Accounts payable", value: usd(a.payables), delta: "50 bills", tone: "neutral", helper: "Open vendor balances" }),
+      exposure: node("MetricCard", { label: "Net working capital", value: usd(a.receivables - a.payables), delta: "+8.6%", tone: "positive", helper: "Receivables minus payables" }),
+      trend: node("ComparisonChart", { title: "Receivables vs payables", description: "Twelve-month working-capital trajectory", data: a.monthly, xKey: "month", series: [{ key: "receivables", label: "Receivables", format: "currency" }, { key: "payables", label: "Payables", format: "currency" }], format: "currency", span: "wide" }),
+      ar: node("BarChartCard", { title: "Receivables aging", description: "Outstanding customer invoices", data: a.receivablesAging, xKey: "bucket", series: [{ key: "amount", label: "Receivables", format: "currency" }], format: "currency", span: "half" }),
+      ap: node("BarChartCard", { title: "Payables aging", description: "Outstanding vendor bills", data: a.payablesAging, xKey: "bucket", series: [{ key: "amount", label: "Payables", format: "currency" }], format: "currency", span: "half" }),
+    }, ["receivables", "payables", "exposure", "trend", "ar", "ap"]);
+  }
+  if (receivables) {
+    const overdue = a.receivablesAging.slice(1).reduce((sum, row) => sum + Number(row.amount), 0);
+    return spec("AnalysisGrid", "Accounts receivable", `Reconfigured from “${intent}”`, {
+      total: node("MetricCard", { label: "Open receivables", value: usd(a.receivables), delta: "+4.2%", tone: "neutral", helper: "Across 74 invoices" }),
+      overdue: node("MetricCard", { label: "Past due", value: usd(overdue), delta: "25.1%", tone: "negative", helper: "Of open receivables" }),
+      critical: node("MetricCard", { label: "90+ days", value: usd(8200), delta: "3 invoices", tone: "negative", helper: "Immediate follow-up" }),
+      aging: node("BarChartCard", { title: "Receivables aging", description: "Outstanding amount by delinquency bucket", data: a.receivablesAging, xKey: "bucket", series: [{ key: "amount", label: "Outstanding", format: "currency" }], format: "currency", span: "wide" }),
+      invoices: node("DataTable", { title: "Invoice-level detail", description: "Open and recently settled customer invoices", data: a.invoices, columns: [{ key: "invoice", label: "Invoice" }, { key: "customer", label: "Customer" }, { key: "issued", label: "Issued" }, { key: "due", label: "Due" }, { key: "amount", label: "Amount", format: "currency" }, { key: "status", label: "Status" }], span: "wide" }),
+    }, ["total", "overdue", "critical", "aging", "invoices"]);
+  }
+  if (payables) {
+    return spec("AnalysisGrid", "Accounts payable", `Reconfigured from “${intent}”`, {
+      total: node("MetricCard", { label: "Open payables", value: usd(a.payables), delta: "50 bills", tone: "neutral", helper: "Vendor obligations" }),
+      dueSoon: node("MetricCard", { label: "Due in 30 days", value: usd(107000), delta: "43 bills", tone: "negative", helper: "Current and 1–30 days" }),
+      liquidity: node("MetricCard", { label: "Cash coverage", value: `${(a.cashBalance / a.payables).toFixed(1)}×`, delta: "Healthy", tone: "positive", helper: "Cash versus payables" }),
+      aging: node("BarChartCard", { title: "Payables aging", description: "Outstanding amount by payment window", data: a.payablesAging, xKey: "bucket", series: [{ key: "amount", label: "Payables", format: "currency" }], format: "currency", span: "wide" }),
+      detail: node("DataTable", { title: "Payment schedule", description: "Obligations grouped by due window", data: a.payablesAging, columns: [{ key: "bucket", label: "Due window" }, { key: "amount", label: "Amount", format: "currency" }, { key: "bills", label: "Bills" }], span: "wide" }),
+    }, ["total", "dueSoon", "liquidity", "aging", "detail"]);
+  }
+  if (/estado de resultado|perdida(s)? y ganancia|profit|utilidad|beneficio|gasto|expense|p\s*&\s*l/.test(normalized)) {
+    const latest = a.monthly.at(-1)!;
+    const requested = requestedSeries(intent, false);
+    const trendSeries = requested.length > 1 ? requested : [{ key: "revenue", label: "Revenue", format: "currency" as const }, { key: "totalExpenses", label: "Expenses", format: "currency" as const }, { key: "netProfit", label: "Net profit", format: "currency" as const }];
+    return spec("AnalysisGrid", "Profit & loss", `Reconfigured from “${intent}”`, {
+      revenue: node("MetricCard", { label: "Revenue", value: usd(Number(latest.revenue)), delta: "+5.4%", tone: "positive", helper: "Current month" }),
+      gross: node("MetricCard", { label: "Gross profit", value: usd(a.grossProfit), delta: `${((a.grossProfit / Number(latest.revenue)) * 100).toFixed(1)}%`, tone: "positive", helper: "Gross margin" }),
+      net: node("MetricCard", { label: "Net profit", value: usd(a.netProfit), delta: `${((a.netProfit / Number(latest.revenue)) * 100).toFixed(1)}%`, tone: a.netProfit > 0 ? "positive" : "negative", helper: "Net margin" }),
+      trend: node("LineChartCard", { title: trendSeries.map((item) => item.label).join(" vs "), description: "Twelve-month income statement", data: a.monthly, xKey: "month", series: trendSeries, format: "currency", span: "wide" }),
+      expenses: node("BarChartCard", { title: "Expense composition", description: "Current month by category", data: a.expenses, xKey: "name", series: [{ key: "value", label: "Expense", format: "currency" }], format: "currency", span: "half" }),
+      insight: node("InsightCard", { eyebrow: "Margin signal", title: "Operating leverage is improving", body: "Revenue is growing faster than payroll and operating expenses over the trailing quarter.", stat: "+1.8 pts", span: "half", tone: "positive" }),
+    }, ["revenue", "gross", "net", "trend", "expenses", "insight"]);
+  }
+  return null;
+}
+
 export function buildIntentSpec(intent: string, context: AnalyticsContext, initialSpec?: DashboardSpec): DashboardSpec {
   const normalized = normalizeIntent(intent);
+  const isIncrementalEdit = /agrega|anade|incluye|quita|remueve|elimina|cambia|remove|add|switch/.test(normalized);
+  const accountingSpec = isIncrementalEdit ? null : accountingIntentSpec(intent, normalized);
+  if (accountingSpec) return accountingSpec;
   const previousChart = initialSpec ? Object.values(initialSpec.elements).find((element) => ["LineChartCard", "AreaChartCard", "BarChartCard", "ComparisonChart"].includes(element.type)) : undefined;
   const previousWasDaily = previousChart?.props.xKey === "day";
   const daily = /dia a dia|diari|por dia|cada dia|daily/.test(normalized) || (previousWasDaily && /agrega|anade|incluye|quita|cambia|muestra/.test(normalized));
-  const explicitlyCustom = daily || /grafico|grafica|chart|visual|linea|barra|area|combina|mezcla/.test(normalized);
+  const explicitlyCustom = daily || isIncrementalEdit || /grafico|grafica|chart|visual|linea|barra|area|combina|mezcla|evolucion|tendencia|trend/.test(normalized);
   if ((context.investigation || context.entityId) && !explicitlyCustom) return buildDefaultSpec(context);
   let series = requestedSeries(intent, daily);
-  const asksVisual = daily || series.length > 1 || /grafico|grafica|chart|visual|linea|barra|area|combina|mezcla|compara/.test(normalized);
+  const asksVisual = daily || isIncrementalEdit || series.length > 1 || /grafico|grafica|chart|visual|linea|barra|area|combina|mezcla|compara|evolucion|tendencia|trend/.test(normalized);
   if (!asksVisual) return buildDefaultSpec(context);
 
-  if (previousWasDaily && previousChart && /agrega|anade|incluye/.test(normalized)) {
+  if (previousChart && /agrega|anade|incluye|add/.test(normalized)) {
     const previousSeries = (previousChart.props.series as CustomSeries[] | undefined) ?? [];
     series = [...previousSeries, ...series.filter((item) => !previousSeries.some((existing) => existing.key === item.key))];
+  }
+  if (previousChart && /quita|remueve|elimina|remove|sin /.test(normalized)) {
+    const previousSeries = (previousChart.props.series as CustomSeries[] | undefined) ?? [];
+    const requestedKeys = new Set(series.map((item) => item.key));
+    series = previousSeries.filter((item) => !requestedKeys.has(item.key));
   }
 
   const chartType = customChartType(intent);
@@ -234,6 +298,7 @@ export function buildIntentSpec(intent: string, context: AnalyticsContext, initi
     churn: analytics.retention.history[index].churn,
     nrr: analytics.retention.history[index].nrr,
     conversion: Number((0.62 + index * 0.018 + Math.sin(index) * 0.05).toFixed(2)),
+    ...analytics.accounting.monthly[index],
   }));
   const primary = series[0];
   const latest = monthlyData.at(-1) as Record<string, string | number> | undefined;

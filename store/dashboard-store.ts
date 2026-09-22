@@ -28,6 +28,9 @@ type DashboardState = {
   setDeveloperMode: (open: boolean) => void;
   setMobileNavOpen: (open: boolean) => void;
   setCommandOpen: (open: boolean) => void;
+  removeElement: (id: string) => void;
+  resizeElement: (id: string) => void;
+  duplicateElement: (id: string) => void;
 };
 
 const initialContext = createContext("overview");
@@ -35,6 +38,24 @@ const initialSpec = buildDefaultSpec(initialContext);
 
 function layoutOf(spec: DashboardSpec) {
   return spec.elements[spec.root]?.type ?? "Unknown";
+}
+
+function withCanvasEdit(state: DashboardState, spec: DashboardSpec, intent: string) {
+  return {
+    spec,
+    revision: state.revision + 1,
+    lastIntent: intent,
+    history: [...state.history, { context: state.context, spec: state.spec }].slice(-20),
+    status: "idle" as const,
+    error: null,
+    diagnostics: {
+      ...state.diagnostics,
+      source: "text" as const,
+      mode: "deterministic" as const,
+      selectedComponents: selectedComponents(spec),
+      layout: layoutOf(spec),
+    },
+  };
 }
 
 export const useDashboardStore = create<DashboardState>((set, get) => ({
@@ -171,4 +192,36 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
   setDeveloperMode: (developerMode) => set({ developerMode }),
   setMobileNavOpen: (mobileNavOpen) => set({ mobileNavOpen }),
   setCommandOpen: (commandOpen) => set({ commandOpen }),
+  removeElement: (id) => {
+    const state = get();
+    const root = state.spec.elements[state.spec.root];
+    if (!root?.children?.includes(id)) return;
+    const elements = { ...state.spec.elements };
+    delete elements[id];
+    const spec = { ...state.spec, elements: { ...elements, [state.spec.root]: { ...root, children: root.children.filter((child) => child !== id) } } };
+    set(withCanvasEdit(state, spec, "Removed a block"));
+  },
+  resizeElement: (id) => {
+    const state = get();
+    const element = state.spec.elements[id];
+    if (!element) return;
+    const current = element.props.span;
+    const next = current === "wide" ? "half" : current === "half" ? "hero" : "wide";
+    const spec = { ...state.spec, elements: { ...state.spec.elements, [id]: { ...element, props: { ...element.props, span: next } } } };
+    set(withCanvasEdit(state, spec, `Resized ${String(element.props.title ?? element.props.label ?? "block")}`));
+  },
+  duplicateElement: (id) => {
+    const state = get();
+    const root = state.spec.elements[state.spec.root];
+    const element = state.spec.elements[id];
+    if (!root?.children?.includes(id) || !element) return;
+    let copyId = `${id}-copy`;
+    let suffix = 2;
+    while (state.spec.elements[copyId]) copyId = `${id}-copy-${suffix++}`;
+    const index = root.children.indexOf(id);
+    const children = [...root.children];
+    children.splice(index + 1, 0, copyId);
+    const spec = { ...state.spec, elements: { ...state.spec.elements, [copyId]: { ...element, props: { ...element.props } }, [state.spec.root]: { ...root, children } } };
+    set(withCanvasEdit(state, spec, `Duplicated ${String(element.props.title ?? element.props.label ?? "block")}`));
+  },
 }));

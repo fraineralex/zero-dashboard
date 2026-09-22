@@ -53,6 +53,19 @@ export type ChartDatum = Record<string, string | number>;
 
 export type AnalyticsSnapshot = {
   months: string[];
+  accounting: {
+    monthly: ChartDatum[];
+    expenses: ChartDatum[];
+    receivablesAging: ChartDatum[];
+    payablesAging: ChartDatum[];
+    invoices: ChartDatum[];
+    cashBalance: number;
+    grossProfit: number;
+    netProfit: number;
+    receivables: number;
+    payables: number;
+    taxesDue: number;
+  };
   cashflow: {
     daily: ChartDatum[];
     totalIn: number;

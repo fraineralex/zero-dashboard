@@ -76,9 +76,68 @@ export function calculateAnalytics(customers = generateDataset()): AnalyticsSnap
   });
   const totalIn = dailyCash.reduce((sum, row) => sum + row.cashIn, 0);
   const totalOut = dailyCash.reduce((sum, row) => sum + row.cashOut, 0);
+  const accountingMonthly = MONTHS.map((month, index) => {
+    const revenue = currency(sumAt(customers, index));
+    const cogs = Math.round(revenue * (0.22 + Math.sin(index * 0.7) * 0.018));
+    const payroll = Math.round(182000 + index * 4800 + Math.cos(index) * 6200);
+    const operatingExpenses = Math.round(126000 + index * 3900 + Math.sin(index * 0.55) * 9800);
+    const taxes = Math.round(revenue * 0.082);
+    const totalExpenses = cogs + payroll + operatingExpenses + taxes;
+    return {
+      month,
+      revenue,
+      cogs,
+      payroll,
+      operatingExpenses,
+      taxes,
+      totalExpenses,
+      grossProfit: revenue - cogs,
+      netProfit: revenue - totalExpenses,
+      receivables: Math.round(revenue * (0.19 + (index % 3) * 0.012)),
+      payables: Math.round(totalExpenses * (0.14 + (index % 2) * 0.018)),
+      cashBalance: 420000 + index * 54000 + Math.round(Math.sin(index * 0.8) * 32000),
+    };
+  });
+  const accountingLatest = accountingMonthly.at(-1)!;
 
   return {
     months: MONTHS,
+    accounting: {
+      monthly: accountingMonthly,
+      expenses: [
+        { name: "Payroll", value: accountingLatest.payroll, change: 3.4 },
+        { name: "Infrastructure", value: 58400, change: -2.1 },
+        { name: "Marketing", value: 47200, change: 6.8 },
+        { name: "Operations", value: 38900, change: 1.9 },
+        { name: "Professional services", value: 26700, change: -4.2 },
+      ],
+      receivablesAging: [
+        { bucket: "Current", amount: 124800, invoices: 42 },
+        { bucket: "1–30 days", amount: 68400, invoices: 17 },
+        { bucket: "31–60 days", amount: 28900, invoices: 8 },
+        { bucket: "61–90 days", amount: 14600, invoices: 4 },
+        { bucket: "90+ days", amount: 8200, invoices: 3 },
+      ],
+      payablesAging: [
+        { bucket: "Current", amount: 74600, bills: 31 },
+        { bucket: "1–30 days", amount: 32400, bills: 12 },
+        { bucket: "31–60 days", amount: 11800, bills: 5 },
+        { bucket: "60+ days", amount: 3900, bills: 2 },
+      ],
+      invoices: [
+        { invoice: "INV-2048", customer: "Acme Corp", issued: "Sep 02", due: "Sep 30", amount: 4200, status: "Overdue" },
+        { invoice: "INV-2044", customer: "Meridian Systems", issued: "Sep 01", due: "Sep 30", amount: 12800, status: "Due" },
+        { invoice: "INV-2037", customer: "Northstar Labs", issued: "Aug 27", due: "Sep 26", amount: 7600, status: "Overdue" },
+        { invoice: "INV-2032", customer: "Helix Commerce", issued: "Aug 24", due: "Sep 23", amount: 5900, status: "Overdue" },
+        { invoice: "INV-2026", customer: "Atlas Works", issued: "Aug 20", due: "Sep 19", amount: 18400, status: "Paid" },
+      ],
+      cashBalance: Number(accountingLatest.cashBalance),
+      grossProfit: Number(accountingLatest.grossProfit),
+      netProfit: Number(accountingLatest.netProfit),
+      receivables: Number(accountingLatest.receivables),
+      payables: Number(accountingLatest.payables),
+      taxesDue: Number(accountingLatest.taxes),
+    },
     cashflow: {
       daily: dailyCash,
       totalIn,
