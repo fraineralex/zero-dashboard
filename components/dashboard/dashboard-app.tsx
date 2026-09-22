@@ -1,8 +1,8 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { ArrowLeft, ArrowUpRight, CircleAlert, Command, LayoutGrid, Mic, RotateCcw, Send, Settings2, Sparkles, X } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { ArrowLeft, ArrowUpRight, CircleAlert, Command, LayoutGrid, Mic, Moon, RotateCcw, Send, Settings2, Sparkles, Sun, X } from "lucide-react";
+import { type FormEvent, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { DashboardRenderer } from "@/components/dashboard/registry";
 import { cn } from "@/lib/utils";
 import { useVox } from "@/lib/voice/use-vox";
@@ -16,6 +16,27 @@ const viewGroups = [
 
 function Wordmark() {
   return <div className="wordmark"><span className="wordmark-mark"><i /><i /></span><strong>Zero</strong><span>Canvas</span></div>;
+}
+
+const subscribeToTheme = (callback: () => void) => { window.addEventListener("zero-theme-change", callback); return () => window.removeEventListener("zero-theme-change", callback); };
+const getTheme = (): "light" | "dark" => document.documentElement.dataset.theme === "light" ? "light" : "dark";
+
+function ThemeToggle() {
+  const theme = useSyncExternalStore(subscribeToTheme, getTheme, () => "dark");
+  useLayoutEffect(() => {
+    const saved = window.localStorage.getItem("zero-theme");
+    const resolved = saved === "light" || saved === "dark" ? saved : window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.dataset.theme = resolved;
+    window.dispatchEvent(new Event("zero-theme-change"));
+  }, []);
+  const toggle = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    window.localStorage.setItem("zero-theme", next);
+    window.dispatchEvent(new Event("zero-theme-change"));
+  };
+  const light = theme === "light";
+  return <button className="icon-button theme-toggle" aria-label={light ? "Activate dark mode" : "Activate light mode"} title={light ? "Dark mode" : "Light mode"} onClick={toggle}>{light ? <Moon size={15} /> : <Sun size={15} />}</button>;
 }
 
 function DeveloperPanel() {
@@ -72,5 +93,5 @@ export function DashboardApp() {
   const blockCount = spec.elements[spec.root]?.children?.length ?? 0;
   useEffect(() => { const onKeyDown = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === "d") { event.preventDefault(); setDeveloperMode(true); } }; window.addEventListener("keydown", onKeyDown); return () => window.removeEventListener("keydown", onKeyDown); }, [setDeveloperMode]);
 
-  return <div className="app-shell single-canvas"><header className="app-header"><Wordmark /><HeaderComposer /><div className="header-actions">{history.length ? <button className="header-text-action" aria-label="Undo last canvas change" onClick={goBack}><ArrowLeft size={14} /><span>Undo</span></button> : null}<button className="header-text-action" aria-label="Reset canvas" onClick={() => navigate("overview")}><RotateCcw size={14} /><span>Reset</span></button><button className="icon-button" aria-label="Open developer mode" onClick={() => setDeveloperMode(true)}><Settings2 size={15} /></button></div></header><main className="analytics-canvas" aria-busy={status === "composing"}><div className="canvas-controlbar"><div><span className={cn("live-dot", status === "composing" && "working")} /><strong>{blockCount} live blocks</strong>{lastIntent ? <p title={lastIntent}>{lastIntent}</p> : <p>General overview · hover any block to shape it</p>}</div><button onClick={() => setCommandOpen(true)}><LayoutGrid size={14} />Explore views</button></div>{error ? <div className="inline-error" role="alert"><CircleAlert size={15} /><span>{error}</span><button onClick={() => navigate("overview")}>Restore overview</button></div> : null}<div className={cn("composition-status", status === "composing" && "visible")}><span /><p>Recomposing measures and detail</p></div><div className="spec-transition" key={revision}><DashboardRenderer spec={spec} loading={status === "composing"} /></div></main><CommandCenter /><DeveloperPanel /></div>;
+  return <div className="app-shell single-canvas"><header className="app-header"><Wordmark /><HeaderComposer /><div className="header-actions">{history.length ? <button className="header-text-action" aria-label="Undo last canvas change" onClick={goBack}><ArrowLeft size={14} /><span>Undo</span></button> : null}<button className="header-text-action" aria-label="Reset canvas" onClick={() => navigate("overview")}><RotateCcw size={14} /><span>Reset</span></button><ThemeToggle /><button className="icon-button" aria-label="Open developer mode" onClick={() => setDeveloperMode(true)}><Settings2 size={15} /></button></div></header><main className="analytics-canvas" aria-busy={status === "composing"}><div className="canvas-controlbar"><div><span className={cn("live-dot", status === "composing" && "working")} /><strong>{blockCount} live blocks</strong>{lastIntent ? <p title={lastIntent}>{lastIntent}</p> : <p>General overview · hover any block to shape it</p>}</div><button onClick={() => setCommandOpen(true)}><LayoutGrid size={14} />Explore views</button></div>{error ? <div className="inline-error" role="alert"><CircleAlert size={15} /><span>{error}</span><button onClick={() => navigate("overview")}>Restore overview</button></div> : null}<div className={cn("composition-status", status === "composing" && "visible")}><span /><p>Recomposing measures and detail</p></div><div className="spec-transition" key={revision}><DashboardRenderer spec={spec} loading={status === "composing"} /></div></main><CommandCenter /><DeveloperPanel /></div>;
 }

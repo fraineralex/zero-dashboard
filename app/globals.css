@@ -302,3 +302,39 @@ th,td { height:37px; padding:0 12px 0 0; border-bottom:1px solid #eeeeec; white-
   .view-options button { background:#121212; }
   .block-controls button { background:rgba(23,23,23,.94); }
 }
+
+/* Explicit, persistent theme choice */
+:root[data-theme="dark"] { color-scheme:dark; --background:#101010; --panel:#171717; --foreground:#ededed; --muted-foreground:#aaa; --muted:#232323; --border:#2a2a2a; --border-strong:#474747; --grid-line:#2a2a2a; --chart-1:0 0% 90%; --chart-2:169 34% 60%; --chart-3:31 68% 62%; --positive:#70c99a; --negative:#f08a8a; }
+:root[data-theme="dark"] .app-header,:root[data-theme="dark"] .left-sidebar,:root[data-theme="dark"] .suggestions-rail { background:rgba(18,18,18,.96); }
+:root[data-theme="dark"] .command-trigger,:root[data-theme="dark"] .icon-button,:root[data-theme="dark"] .period-control,:root[data-theme="dark"] .dashboard-card,:root[data-theme="dark"] .entity-header,:root[data-theme="dark"] .rail-anomaly { background:#171717; }
+:root[data-theme="dark"] .metric-topline,:root[data-theme="dark"] .metric-foot,:root[data-theme="dark"] .card-heading p,:root[data-theme="dark"] .insight-body,:root[data-theme="dark"] td,:root[data-theme="dark"] .period-control,:root[data-theme="dark"] .developer-note,:root[data-theme="dark"] .developer-components span,:root[data-theme="dark"] .comparison-summary p,:root[data-theme="dark"] .comparison-summary small { color:#aaa; }
+:root[data-theme="dark"] .chart-standard .recharts-text { fill:#aaa; }
+:root[data-theme="dark"] td:first-child { color:#eee; }
+:root[data-theme="dark"] th { color:#aaa; }
+:root[data-theme="dark"] .clickable-row:hover,:root[data-theme="dark"] .segment-list button:hover { background:#202020; }
+:root[data-theme="dark"] .chart-tooltip,:root[data-theme="dark"] .command-dialog,:root[data-theme="dark"] .developer-panel,:root[data-theme="dark"] .mobile-nav-sheet,:root[data-theme="dark"] .view-library { background:#1b1b1b; }
+:root[data-theme="dark"] .command-dialog input { background:#1b1b1b; color:#eee; }
+:root[data-theme="dark"] .command-footer { background:#151515; }
+:root[data-theme="dark"] kbd,:root[data-theme="dark"] .workspace-avatar { background:#202020; color:#aaa; }
+:root[data-theme="dark"] .view-options button { background:#121212; }
+:root[data-theme="dark"] .block-controls button { background:rgba(23,23,23,.94); }
+:root[data-theme="dark"] .header-composer { box-shadow:0 5px 18px rgba(0,0,0,.22); }
+
+:root[data-theme="light"] { color-scheme:light; --background:#f7f7f6; --panel:#fff; --foreground:#171717; --muted-foreground:#666; --muted:#f1f1ef; --border:#e5e5e2; --border-strong:#c9c9c5; --grid-line:#ededeb; --chart-1:0 0% 14%; --chart-2:169 36% 34%; --chart-3:27 58% 45%; --positive:#227447; --negative:#b64040; }
+:root[data-theme="light"] .app-header,:root[data-theme="light"] .left-sidebar,:root[data-theme="light"] .suggestions-rail { background:rgba(255,255,255,.94); }
+:root[data-theme="light"] .command-trigger,:root[data-theme="light"] .icon-button,:root[data-theme="light"] .period-control,:root[data-theme="light"] .dashboard-card,:root[data-theme="light"] .entity-header,:root[data-theme="light"] .rail-anomaly { background:#fff; }
+:root[data-theme="light"] .metric-topline,:root[data-theme="light"] .metric-foot,:root[data-theme="light"] .card-heading p,:root[data-theme="light"] .insight-body,:root[data-theme="light"] td,:root[data-theme="light"] .period-control,:root[data-theme="light"] .developer-note,:root[data-theme="light"] .developer-components span,:root[data-theme="light"] .comparison-summary p,:root[data-theme="light"] .comparison-summary small { color:#666; }
+:root[data-theme="light"] .chart-standard .recharts-text { fill:#666; }
+:root[data-theme="light"] td:first-child { color:#222; }
+:root[data-theme="light"] th { color:#666; }
+:root[data-theme="light"] .clickable-row:hover,:root[data-theme="light"] .segment-list button:hover { background:#f4f4f2; }
+:root[data-theme="light"] .chart-tooltip,:root[data-theme="light"] .command-dialog,:root[data-theme="light"] .developer-panel,:root[data-theme="light"] .mobile-nav-sheet,:root[data-theme="light"] .view-library { background:#fff; }
+:root[data-theme="light"] .command-dialog input { background:#fff; color:#171717; }
+:root[data-theme="light"] .command-footer { background:#fafafa; }
+:root[data-theme="light"] kbd,:root[data-theme="light"] .workspace-avatar { background:#fff; color:#666; }
+:root[data-theme="light"] .finding-card { background:#1b1b1b; color:#fff; }
+:root[data-theme="light"] .view-options button { background:#f7f7f6; }
+:root[data-theme="light"] .block-controls button { background:rgba(255,255,255,.94); }
+:root[data-theme="light"] .header-composer { box-shadow:0 5px 18px rgba(0,0,0,.04); }
+.theme-toggle { transition:background 140ms ease,color 140ms ease,transform 180ms ease; }
+.theme-toggle:hover { background:var(--muted); color:var(--foreground); transform:rotate(8deg); }
