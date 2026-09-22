@@ -152,6 +152,102 @@ function acquisitionSpec(): DashboardSpec {
   }, ["conversion", "cac", "pipeline", "funnel", "sources", "insight"]);
 }
 
+type CustomSeries = { key: string; label: string; format: "currency" | "percent" | "number"; axis?: "left" | "right" };
+
+const normalizeIntent = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+function requestedSeries(intent: string, daily: boolean): CustomSeries[] {
+  const normalized = normalizeIntent(intent);
+  const matches: CustomSeries[] = [];
+  const add = (series: CustomSeries, pattern: RegExp) => { if (pattern.test(normalized) && !matches.some((item) => item.key === series.key)) matches.push(series); };
+  if (daily) {
+    add({ key: "cashIn", label: "Cash in", format: "currency" }, /entrada(s)? de dinero|cash ?in|cobro|ingreso|revenue/);
+    add({ key: "subscriptions", label: "Subscriptions", format: "currency" }, /suscrip|subscription|mrr/);
+    add({ key: "invoices", label: "Invoices paid", format: "currency" }, /factur|invoice/);
+    add({ key: "refunds", label: "Refunds", format: "currency" }, /reembolso|refund/);
+    add({ key: "cashOut", label: "Cash out", format: "currency" }, /salida(s)? de dinero|egreso|cash ?out|gasto/);
+    add({ key: "netCash", label: "Net cash", format: "currency" }, /neto|net cash|flujo de caja|cash flow/);
+    add({ key: "newCustomers", label: "New customers", format: "number", axis: "right" }, /cliente|customer/);
+    add({ key: "failedPayments", label: "Failed payments", format: "number", axis: "right" }, /pago(s)? fallido|failed payment/);
+    return matches.length ? matches : [
+      { key: "cashIn", label: "Cash in", format: "currency" },
+      { key: "subscriptions", label: "Subscriptions", format: "currency" },
+      { key: "invoices", label: "Invoices paid", format: "currency" },
+    ];
+  }
+  add({ key: "revenue", label: "Revenue", format: "currency" }, /ingreso|revenue|mrr|factur/);
+  add({ key: "enterpriseRevenue", label: "Enterprise revenue", format: "currency" }, /enterprise|empresarial/);
+  add({ key: "customers", label: "Customers", format: "number", axis: "right" }, /cliente|customer|cuenta/);
+  add({ key: "newCustomers", label: "New customers", format: "number", axis: "right" }, /nuevo(s)? cliente|new customer/);
+  add({ key: "churn", label: "Churn", format: "percent", axis: "right" }, /churn|abandono|cancelacion/);
+  add({ key: "nrr", label: "NRR", format: "percent", axis: "right" }, /nrr|retencion|retention/);
+  add({ key: "conversion", label: "Conversion", format: "percent", axis: "right" }, /conversion/);
+  return matches;
+}
+
+function customChartType(intent: string) {
+  const normalized = normalizeIntent(intent);
+  if (/barra|bar chart|column/.test(normalized)) return "BarChartCard";
+  if (/area|rellen/.test(normalized)) return "AreaChartCard";
+  return "LineChartCard";
+}
+
+export function buildIntentSpec(intent: string, context: AnalyticsContext, initialSpec?: DashboardSpec): DashboardSpec {
+  const normalized = normalizeIntent(intent);
+  const previousChart = initialSpec ? Object.values(initialSpec.elements).find((element) => ["LineChartCard", "AreaChartCard", "BarChartCard", "ComparisonChart"].includes(element.type)) : undefined;
+  const previousWasDaily = previousChart?.props.xKey === "day";
+  const daily = /dia a dia|diari|por dia|cada dia|daily/.test(normalized) || (previousWasDaily && /agrega|anade|incluye|quita|cambia|muestra/.test(normalized));
+  const explicitlyCustom = daily || /grafico|grafica|chart|visual|linea|barra|area|combina|mezcla/.test(normalized);
+  if ((context.investigation || context.entityId) && !explicitlyCustom) return buildDefaultSpec(context);
+  let series = requestedSeries(intent, daily);
+  const asksVisual = daily || series.length > 1 || /grafico|grafica|chart|visual|linea|barra|area|combina|mezcla|compara/.test(normalized);
+  if (!asksVisual) return buildDefaultSpec(context);
+
+  if (previousWasDaily && previousChart && /agrega|anade|incluye/.test(normalized)) {
+    const previousSeries = (previousChart.props.series as CustomSeries[] | undefined) ?? [];
+    series = [...previousSeries, ...series.filter((item) => !previousSeries.some((existing) => existing.key === item.key))];
+  }
+
+  const chartType = customChartType(intent);
+  if (daily) {
+    const requestedLabel = series.map((item) => item.label).join(" · ");
+    return spec("AnalysisGrid", "Daily cash intelligence", `Reconfigured from “${intent.slice(0, 86)}${intent.length > 86 ? "…" : ""}”`, {
+      total: node("MetricCard", { label: "Cash collected", value: usd(analytics.cashflow.totalIn), delta: "+6.8%", tone: "positive", helper: "September total", span: "hero" }),
+      average: node("MetricCard", { label: "Average per day", value: usd(analytics.cashflow.averageDaily), delta: "+3.1%", tone: "positive", helper: "Across 30 days" }),
+      net: node("MetricCard", { label: "Net cash", value: usd(analytics.cashflow.net), delta: "+4.7%", tone: "positive", helper: "Cash in minus cash out" }),
+      chart: node(chartType, { title: "Money movement, day by day", description: requestedLabel, data: analytics.cashflow.daily, xKey: "day", series, format: "currency", span: "wide" }),
+      insight: node("InsightCard", { eyebrow: "Canvas insight", title: "Collection peaks cluster around billing dates", body: "The first and fifteenth carry stronger invoice collections. Every requested measure is rendered as its own series; count-based measures use the right axis.", stat: "2 peaks", span: "half", tone: "positive" }),
+      breakdown: node("BarChartCard", { title: "Cash-in composition", description: "Subscriptions and paid invoices", data: analytics.cashflow.daily.filter((_, index) => index % 5 === 0), xKey: "day", series: [{ key: "subscriptions", label: "Subscriptions", format: "currency" }, { key: "invoices", label: "Invoices", format: "currency" }], format: "currency", span: "half" }),
+    }, ["total", "average", "net", "chart", "insight", "breakdown"]);
+  }
+
+  if (!series.length && previousChart) series = (previousChart.props.series as CustomSeries[] | undefined) ?? [];
+  if (!series.length) series = [{ key: "revenue", label: "Revenue", format: "currency" }];
+  const monthlyData = analytics.months.map((month, index) => ({
+    month,
+    revenue: analytics.revenue.history[index].revenue,
+    enterpriseRevenue: analytics.enterprise.history[index].revenue,
+    customers: analytics.customers.total - (11 - index) * 74,
+    newCustomers: 98 + index * 4 + (index % 3) * 17,
+    churn: analytics.retention.history[index].churn,
+    nrr: analytics.retention.history[index].nrr,
+    conversion: Number((0.62 + index * 0.018 + Math.sin(index) * 0.05).toFixed(2)),
+  }));
+  const primary = series[0];
+  const latest = monthlyData.at(-1) as Record<string, string | number> | undefined;
+  return spec("AnalysisGrid", "Custom analytical canvas", `Reconfigured from “${intent.slice(0, 86)}${intent.length > 86 ? "…" : ""}”`, {
+    primary: node("MetricCard", { label: primary.label, value: primary.format === "currency" ? usd(Number(latest?.[primary.key] ?? 0)) : formatValueForMetric(Number(latest?.[primary.key] ?? 0), primary.format), delta: "+2.4%", tone: "positive", helper: "Latest period", span: "hero" }),
+    dimensions: node("MetricCard", { label: "Combined measures", value: String(series.length), delta: "Live", tone: "neutral", helper: "One line per measure" }),
+    chart: node(chartType, { title: series.map((item) => item.label).join(" vs "), description: "Combined on one canvas · right axis for rates and counts", data: monthlyData, xKey: "month", series, format: primary.format, span: "wide" }),
+    note: node("InsightCard", { eyebrow: "Flexible composition", title: "This view was assembled from your request", body: "Ask to add or remove a measure, switch to bars or area, change the time grain, or focus on a customer segment.", stat: `${series.length} series`, span: "half", tone: "positive" }),
+  }, ["primary", "dimensions", "chart", "note"]);
+}
+
+function formatValueForMetric(value: number, format: CustomSeries["format"]) {
+  if (format === "percent") return `${value.toFixed(1)}%`;
+  return number(value);
+}
+
 export function buildDefaultSpec(context: AnalyticsContext): DashboardSpec {
   if (context.entityId === "acme") return customerSpec(context);
   switch (context.area) {

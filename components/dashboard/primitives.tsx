@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { useDashboardStore } from "@/store/dashboard-store";
 
 type BaseCardProps = { title: string; description?: string; span?: string };
-type Series = { key: string; label: string };
+type Series = { key: string; label: string; format?: "currency" | "percent" | "number"; axis?: "left" | "right" };
 type ChartRow = Record<string, string | number | boolean | null>;
 
 const formatValue = (value: string | number, format?: string) => {
@@ -57,12 +57,14 @@ export function MetricCard({ props }: { props: { label: string; value: string; d
 }
 
 function chartConfig(series: Series[]): ChartConfig {
-  const colors = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))"];
+  const colors = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "#d07a42", "#3b8c88"];
   return Object.fromEntries(series.map((item, index) => [item.key, { label: item.label, color: colors[index] }]));
 }
 
 export function LineChartCard({ props }: { props: BaseCardProps & { data: ChartRow[]; xKey: string; series: Series[]; format?: string; action?: string } }) {
   const navigate = useDashboardStore((state) => state.navigate);
+  const leftSeries = props.series.find((item) => item.axis !== "right") ?? props.series[0];
+  const rightSeries = props.series.find((item) => item.axis === "right");
   return (
     <CardFrame {...props}>
       <button className="chart-action-layer" aria-label={props.action ? `Open ${props.action}` : undefined} onClick={props.action ? () => navigate(props.action as "revenue") : undefined} tabIndex={props.action ? 0 : -1}>
@@ -70,9 +72,10 @@ export function LineChartCard({ props }: { props: BaseCardProps & { data: ChartR
           <LineChart data={props.data} margin={{ top: 12, right: 8, bottom: 0, left: 0 }}>
             <CartesianGrid vertical={false} stroke="var(--grid-line)" />
             <XAxis dataKey={props.xKey} tickLine={false} axisLine={false} tickMargin={10} interval="preserveStartEnd" />
-            <YAxis tickLine={false} axisLine={false} width={54} tickFormatter={(value) => formatValue(value, props.format)} />
-            <ChartTooltip cursor={{ stroke: "var(--border-strong)", strokeDasharray: "3 3" }} content={<ChartTooltipContent formatter={(value) => formatValue(value, props.format)} />} />
-            {props.series.map((series, index) => <Line key={series.key} dataKey={series.key} type="monotone" stroke={`var(--color-${series.key})`} strokeWidth={index === 0 ? 2 : 1.5} strokeDasharray={index === 1 ? "4 4" : undefined} dot={false} activeDot={{ r: 3 }} isAnimationActive={false} />)}
+            <YAxis yAxisId="left" tickLine={false} axisLine={false} width={54} tickFormatter={(value) => formatValue(value, leftSeries?.format ?? props.format)} />
+            {rightSeries ? <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} width={48} tickFormatter={(value) => formatValue(value, rightSeries.format)} /> : null}
+            <ChartTooltip cursor={{ stroke: "var(--border-strong)", strokeDasharray: "3 3" }} content={<ChartTooltipContent formatter={(value, name) => formatValue(value, props.series.find((item) => item.label === name)?.format ?? props.format)} />} />
+            {props.series.map((series, index) => <Line key={series.key} yAxisId={series.axis ?? "left"} dataKey={series.key} type="monotone" stroke={`var(--color-${series.key})`} strokeWidth={index === 0 ? 2.2 : 1.7} strokeDasharray={index > 2 ? "4 3" : undefined} dot={false} activeDot={{ r: 3 }} isAnimationActive={false} />)}
             {props.series.length > 1 ? <ChartLegend verticalAlign="top" height={24} /> : null}
           </LineChart>
         </ChartContainer>
@@ -86,17 +89,18 @@ export function ComparisonChart(props: Parameters<typeof LineChartCard>[0]) {
 }
 
 export function AreaChartCard({ props }: { props: BaseCardProps & { data: ChartRow[]; xKey: string; series: Series[]; format?: string } }) {
-  const series = props.series[0];
+  const firstSeries = props.series[0];
   return (
     <CardFrame {...props}>
       <ChartContainer config={chartConfig(props.series)} className="chart-standard" aria-label={`${props.title} chart`}>
         <AreaChart data={props.data} margin={{ top: 12, right: 8, bottom: 0, left: 0 }}>
-          <defs><linearGradient id={`fill-${series.key}`} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={`var(--color-${series.key})`} stopOpacity={0.2} /><stop offset="95%" stopColor={`var(--color-${series.key})`} stopOpacity={0} /></linearGradient></defs>
+          <defs>{props.series.map((series) => <linearGradient key={series.key} id={`fill-${series.key}`} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={`var(--color-${series.key})`} stopOpacity={0.18} /><stop offset="95%" stopColor={`var(--color-${series.key})`} stopOpacity={0} /></linearGradient>)}</defs>
           <CartesianGrid vertical={false} stroke="var(--grid-line)" />
           <XAxis dataKey={props.xKey} tickLine={false} axisLine={false} tickMargin={10} interval="preserveStartEnd" />
-          <YAxis tickLine={false} axisLine={false} width={42} tickFormatter={(value) => formatValue(value, props.format)} />
-          <ChartTooltip content={<ChartTooltipContent formatter={(value) => formatValue(value, props.format)} />} />
-          <Area dataKey={series.key} type="monotone" stroke={`var(--color-${series.key})`} fill={`url(#fill-${series.key})`} strokeWidth={2} isAnimationActive={false} />
+          <YAxis tickLine={false} axisLine={false} width={48} tickFormatter={(value) => formatValue(value, firstSeries?.format ?? props.format)} />
+          <ChartTooltip content={<ChartTooltipContent formatter={(value, name) => formatValue(value, props.series.find((item) => item.label === name)?.format ?? props.format)} />} />
+          {props.series.map((series) => <Area key={series.key} dataKey={series.key} type="monotone" stroke={`var(--color-${series.key})`} fill={`url(#fill-${series.key})`} strokeWidth={2} isAnimationActive={false} />)}
+          {props.series.length > 1 ? <ChartLegend verticalAlign="top" height={24} /> : null}
         </AreaChart>
       </ChartContainer>
     </CardFrame>
@@ -104,16 +108,17 @@ export function AreaChartCard({ props }: { props: BaseCardProps & { data: ChartR
 }
 
 export function BarChartCard({ props }: { props: BaseCardProps & { data: ChartRow[]; xKey: string; series: Series[]; format?: string; horizontal?: boolean } }) {
-  const series = props.series[0];
+  const firstSeries = props.series[0];
   return (
     <CardFrame {...props}>
       <ChartContainer config={chartConfig(props.series)} className="chart-standard" aria-label={`${props.title} chart`}>
         <BarChart data={props.data} layout={props.horizontal ? "vertical" : "horizontal"} margin={{ top: 12, right: 10, bottom: 0, left: props.horizontal ? 8 : 0 }}>
           <CartesianGrid vertical={!props.horizontal} horizontal={props.horizontal} stroke="var(--grid-line)" />
           {props.horizontal ? <YAxis dataKey={props.xKey} type="category" tickLine={false} axisLine={false} width={96} /> : <XAxis dataKey={props.xKey} tickLine={false} axisLine={false} tickMargin={10} />}
-          {props.horizontal ? <XAxis type="number" hide /> : <YAxis tickLine={false} axisLine={false} width={48} tickFormatter={(value) => formatValue(value, props.format)} />}
-          <ChartTooltip cursor={{ fill: "var(--muted)" }} content={<ChartTooltipContent formatter={(value) => formatValue(value, props.format)} />} />
-          <Bar dataKey={series.key} fill={`var(--color-${series.key})`} radius={props.horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0]} maxBarSize={34} isAnimationActive={false} />
+          {props.horizontal ? <XAxis type="number" hide /> : <YAxis tickLine={false} axisLine={false} width={48} tickFormatter={(value) => formatValue(value, firstSeries?.format ?? props.format)} />}
+          <ChartTooltip cursor={{ fill: "var(--muted)" }} content={<ChartTooltipContent formatter={(value, name) => formatValue(value, props.series.find((item) => item.label === name)?.format ?? props.format)} />} />
+          {props.series.map((series) => <Bar key={series.key} dataKey={series.key} fill={`var(--color-${series.key})`} radius={props.horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0]} maxBarSize={34} isAnimationActive={false} />)}
+          {props.series.length > 1 ? <ChartLegend verticalAlign="top" height={24} /> : null}
         </BarChart>
       </ChartContainer>
     </CardFrame>

@@ -5,7 +5,12 @@ import { z } from "zod";
 const span = z.enum(["hero", "half", "wide"]).optional();
 const base = { title: z.string(), description: z.string().optional(), span };
 const datum = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()]));
-const series = z.array(z.object({ key: z.string(), label: z.string() }));
+const series = z.array(z.object({
+  key: z.string(),
+  label: z.string(),
+  format: z.enum(["currency", "percent", "number"]).optional(),
+  axis: z.enum(["left", "right"]).optional(),
+}));
 
 export const dashboardCatalog = defineCatalog(schema, {
   components: {

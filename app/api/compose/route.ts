@@ -4,7 +4,7 @@ import { experimental_composeSpec, experimental_createEvaluator, type Spec } fro
 import { z } from "zod";
 import { dashboardCatalog } from "@/lib/dashboard/catalog";
 import { resolveCandidates } from "@/lib/dashboard/candidates";
-import { buildDefaultSpec } from "@/lib/dashboard/specs";
+import { buildIntentSpec } from "@/lib/dashboard/specs";
 import type { AnalyticsContext, DashboardSpec } from "@/types/analytics";
 
 export const runtime = "nodejs";
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
 
   const context = payload.context as AnalyticsContext;
   const resolved = resolveCandidates(context, payload.intent);
-  const fallback = buildDefaultSpec(context);
+  const fallback = buildIntentSpec(payload.intent, context, payload.initialSpec);
   const apiKey = process.env.AI_GATEWAY_API_KEY;
   const encoder = new TextEncoder();
 
@@ -82,13 +82,12 @@ export async function POST(request: Request) {
 
       try {
         const evaluate = experimental_createEvaluator({ model: "typesafe-ai/jev", apiKey, timeoutMs: 10_000 });
-        const isNarrowEdit = Boolean(payload.initialSpec && /^(only|compare with|break down|show failed|show payment|show usage)/i.test(payload.intent));
         for await (const event of experimental_composeSpec({
           catalog: dashboardCatalog,
           candidates: resolved.candidates,
           prompt: payload.intent,
           context: resolved.context,
-          initialSpec: isNarrowEdit ? payload.initialSpec as Spec : undefined,
+          initialSpec: payload.initialSpec as Spec | undefined,
           initialState: {},
           evaluate,
           strategy: "batch",
@@ -97,9 +96,9 @@ export async function POST(request: Request) {
           maxDepth: 4,
           signal: AbortSignal.timeout(28_000),
           instructions: {
-            root: "Choose exactly one approved layout that matches the analytical intent.",
-            next: "Choose only configured evidence that directly answers the request. Never infer new values.",
-            parent: "Place evidence in the root layout default slot in analytical reading order.",
+            root: "Keep one continuous analytical canvas. Reconfigure the existing layout instead of modeling navigation to another page.",
+            next: "Choose only configured evidence that answers the request. Preserve useful existing elements when the user asks to add, remove, compare, or restyle a measure.",
+            parent: "Place evidence in the root layout default slot in analytical reading order. Multiple requested measures should share one chart when a prepared combined-series candidate exists.",
           },
         })) {
           if (event.type === "step") {

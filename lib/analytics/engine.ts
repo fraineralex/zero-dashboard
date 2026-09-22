@@ -55,9 +55,37 @@ export function calculateAnalytics(customers = generateDataset()): AnalyticsSnap
     { stage: "Trials", value: 1920 },
     { stage: "Customers", value: 405 },
   ];
+  const dailyCash = Array.from({ length: 30 }, (_, index) => {
+    const day = index + 1;
+    const weekday = index % 7;
+    const subscriptions = Math.round(23800 + Math.sin(index * 0.72) * 4300 + (weekday < 5 ? 3100 : -5200));
+    const invoices = Math.round(7800 + Math.cos(index * 0.48) * 2600 + (day === 1 || day === 15 ? 9500 : 0));
+    const refunds = Math.max(450, Math.round(1250 + Math.sin(index * 1.14) * 620));
+    const operatingOut = Math.round(14600 + Math.cos(index * 0.31) * 2100 + (day % 7 === 5 ? 4200 : 0));
+    return {
+      day: `Sep ${String(day).padStart(2, "0")}`,
+      cashIn: subscriptions + invoices,
+      subscriptions,
+      invoices,
+      refunds,
+      cashOut: operatingOut + refunds,
+      netCash: subscriptions + invoices - operatingOut - refunds,
+      newCustomers: 7 + ((index * 7) % 13),
+      failedPayments: 1 + ((index * 5) % 6),
+    };
+  });
+  const totalIn = dailyCash.reduce((sum, row) => sum + row.cashIn, 0);
+  const totalOut = dailyCash.reduce((sum, row) => sum + row.cashOut, 0);
 
   return {
     months: MONTHS,
+    cashflow: {
+      daily: dailyCash,
+      totalIn,
+      totalOut,
+      net: totalIn - totalOut,
+      averageDaily: Math.round(totalIn / dailyCash.length),
+    },
     revenue: {
       current: currency(current),
       previous: currency(previous),

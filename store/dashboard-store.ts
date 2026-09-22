@@ -10,6 +10,8 @@ type HistoryEntry = { context: AnalyticsContext; spec: DashboardSpec };
 type DashboardState = {
   context: AnalyticsContext;
   spec: DashboardSpec;
+  revision: number;
+  lastIntent: string | null;
   history: HistoryEntry[];
   status: "idle" | "composing" | "error";
   error: string | null;
@@ -38,6 +40,8 @@ function layoutOf(spec: DashboardSpec) {
 export const useDashboardStore = create<DashboardState>((set, get) => ({
   context: initialContext,
   spec: initialSpec,
+  revision: 0,
+  lastIntent: null,
   history: [],
   status: "idle",
   error: null,
@@ -62,6 +66,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     set({
       context,
       spec,
+      revision: previous.revision + 1,
+      lastIntent: area === "overview" ? null : `Show ${area}`,
       history: [...previous.history, { context: previous.context, spec: previous.spec }].slice(-20),
       status: "idle",
       error: null,
@@ -82,7 +88,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const previous = get();
     const context: AnalyticsContext = { ...createContext("customers"), entityType: "customer", entityId: id, investigation: "customer_risk" };
     const spec = buildDefaultSpec(context);
-    set({ context, spec, history: [...previous.history, { context: previous.context, spec: previous.spec }].slice(-20), status: "idle", error: null });
+    set({ context, spec, revision: previous.revision + 1, lastIntent: `Open ${id}`, history: [...previous.history, { context: previous.context, spec: previous.spec }].slice(-20), status: "idle", error: null });
   },
   submitIntent: async (intent, source) => {
     const trimmed = intent.trim().slice(0, 500);
@@ -97,7 +103,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       const response = await fetch("/api/compose", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ intent: trimmed, context: nextContext, source, initialSpec: nextContext.area === previous.context.area ? previous.spec : undefined }),
+        body: JSON.stringify({ intent: trimmed, context: nextContext, source, initialSpec: previous.spec }),
         signal: controller.signal,
       });
       if (!response.ok || !response.body) throw new Error("Composition service is unavailable.");
@@ -118,7 +124,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           if (event.spec) {
             latestSpec = event.spec;
             if (!firstSpecAt) firstSpecAt = performance.now();
-            set({ spec: latestSpec, context: nextContext });
+            set((state) => ({ spec: latestSpec, context: nextContext, revision: state.revision + 1, lastIntent: trimmed }));
           }
           if (event.diagnostics) latestDiagnostics = { ...latestDiagnostics, ...event.diagnostics };
           if (event.type === "error") throw new Error(event.message ?? "Composition failed.");
@@ -128,6 +134,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       set({
         context: nextContext,
         spec: latestSpec,
+        lastIntent: trimmed,
         history: [...previous.history, { context: previous.context, spec: previous.spec }].slice(-20),
         status: "idle",
         abortController: null,
@@ -159,7 +166,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
     const history = get().history;
     const previous = history.at(-1);
     if (!previous) return;
-    set({ context: previous.context, spec: previous.spec, history: history.slice(0, -1), status: "idle", error: null });
+    set((state) => ({ context: previous.context, spec: previous.spec, revision: state.revision + 1, lastIntent: null, history: history.slice(0, -1), status: "idle", error: null }));
   },
   setDeveloperMode: (developerMode) => set({ developerMode }),
   setMobileNavOpen: (mobileNavOpen) => set({ mobileNavOpen }),

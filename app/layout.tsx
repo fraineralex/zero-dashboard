@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Zero Dashboard — Generative Analytics",
-  description: "An analytics dashboard that reorganizes itself around the question you ask.",
+  title: "Zero Canvas — Generative Analytics",
+  description: "One analytical canvas that rebuilds itself around the question you ask.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

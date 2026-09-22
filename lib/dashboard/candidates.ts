@@ -1,5 +1,5 @@
 import type { Experimental_CompositionCandidate } from "@json-render/core";
-import { buildDefaultSpec } from "@/lib/dashboard/specs";
+import { buildDefaultSpec, buildIntentSpec } from "@/lib/dashboard/specs";
 import type { AnalyticsContext, DashboardElement } from "@/types/analytics";
 
 const descriptions: Record<string, string> = {
@@ -40,7 +40,7 @@ function candidateFromElement(id: string, element: DashboardElement, root = fals
 
 export function resolveCandidates(context: AnalyticsContext, intent: string) {
   const started = performance.now();
-  const preferred = buildDefaultSpec(context);
+  const preferred = buildIntentSpec(intent, context);
   const rootElement = preferred.elements[preferred.root];
   const candidates: Experimental_CompositionCandidate[] = [candidateFromElement(`layout-${rootElement.type}`, { ...rootElement, children: undefined }, true)];
   for (const [id, element] of Object.entries(preferred.elements)) {

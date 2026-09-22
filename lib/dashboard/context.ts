@@ -82,7 +82,7 @@ export function suggestionsFor(context: AnalyticsContext): string[] {
 }
 
 export function contextFromIntent(intent: string, current: AnalyticsContext): AnalyticsContext {
-  const normalized = intent.toLowerCase().trim();
+  const normalized = intent.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
   if (/compare acme|similar customers|peers/.test(normalized)) {
     return { ...createContext("customers"), entityType: "customer", entityId: "acme", investigation: "cohort_comparison", comparison: { type: "cohort", value: "enterprise-similar-mrr" } };
   }
@@ -96,9 +96,9 @@ export function contextFromIntent(intent: string, current: AnalyticsContext): An
     return { ...createContext("revenue"), segment: "Enterprise", investigation: "enterprise_decline" };
   }
   if (/enterprise/.test(normalized)) return { ...createContext("revenue"), segment: "Enterprise" };
-  if (/acquisition|conversion|funnel|source/.test(normalized)) return createContext("acquisition");
-  if (/retention|churn|cohort/.test(normalized)) return createContext("retention");
-  if (/customer|account/.test(normalized)) return createContext("customers");
-  if (/revenue|mrr|arr|plan/.test(normalized)) return createContext("revenue");
+  if (/acquisition|adquisicion|conversion|funnel|embudo|source|fuente/.test(normalized)) return createContext("acquisition");
+  if (/retention|retencion|churn|abandono|cohort|cohorte/.test(normalized)) return createContext("retention");
+  if (/customer|cliente|account|cuenta/.test(normalized)) return createContext("customers");
+  if (/revenue|ingreso|entrada de dinero|cash|cobro|mrr|arr|plan|factur/.test(normalized)) return createContext("revenue");
   return { ...current, investigation: current.investigation };
 }
