@@ -47,10 +47,12 @@ function ndjson(value: unknown) {
 }
 
 function logCompositionFailure(stage: string, error: unknown) {
-  const detail = error && typeof error === "object" ? error as { name?: string; statusCode?: number; code?: string } : null;
+  const detail = error && typeof error === "object" ? error as { name?: string; message?: string; statusCode?: number; code?: string } : null;
+  const safeMessage = detail?.message?.replace(/Bearer\s+\S+|eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, "[redacted]").slice(0, 240);
   console.warn("Canvas composition failure", {
     stage,
     name: detail?.name ?? "unknown",
+    message: safeMessage ?? null,
     statusCode: detail?.statusCode ?? null,
     code: detail?.code ?? null,
   });
