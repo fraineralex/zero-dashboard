@@ -46,6 +46,16 @@ function ndjson(value: unknown) {
   return `${JSON.stringify(value)}\n`;
 }
 
+function logCompositionFailure(stage: string, error: unknown) {
+  const detail = error && typeof error === "object" ? error as { name?: string; statusCode?: number; code?: string } : null;
+  console.warn("Canvas composition failure", {
+    stage,
+    name: detail?.name ?? "unknown",
+    statusCode: detail?.statusCode ?? null,
+    code: detail?.code ?? null,
+  });
+}
+
 export async function POST(request: Request) {
   const clientKey = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
   if (rateLimited(clientKey)) return Response.json({ error: "Too many composition requests. Try again shortly." }, { status: 429 });
@@ -95,7 +105,8 @@ export async function POST(request: Request) {
         let uiMemory = deterministicCapabilityDecision(memoryRecipe);
         try {
           uiMemory = await evaluateCapabilityDecision(payload.intent, memoryRecipe, evaluate, AbortSignal.timeout(4_500));
-        } catch {
+        } catch (error) {
+          logCompositionFailure("jev-preflight", error);
           // Composition remains available when the optional capability preflight times out.
         }
         if (uiMemory.decision === "reuse_recipe" && memoryRecipe) {
@@ -108,7 +119,8 @@ export async function POST(request: Request) {
           send({ type: "step", spec: generated, diagnostics: { mode: "luna", candidateCount: resolved.candidates.length, resolverMs: resolved.resolverMs, uiMemory } });
           send({ type: "complete", spec: generated, diagnostics: { mode: "luna", stopReason: "validated-luna-composition", uiMemory } });
           return;
-        } catch {
+        } catch (error) {
+          logCompositionFailure("luna", error);
           // Jev can still assemble prepared candidates if generation is unavailable or invalid.
         }
         for await (const event of experimental_composeSpec({
@@ -141,7 +153,8 @@ export async function POST(request: Request) {
             send({ type: "complete", spec: event.spec, diagnostics: { mode: "jev", stopReason: event.stopReason, uiMemory } });
           }
         }
-      } catch {
+      } catch (error) {
+        logCompositionFailure("jev-composition", error);
         send({ type: "step", spec: fallback, diagnostics: { mode: "deterministic", candidateCount: resolved.candidates.length, resolverMs: resolved.resolverMs, stopReason: "model-composition-unavailable", uiMemory: deterministicCapabilityDecision(memoryRecipe) } });
         send({ type: "complete", spec: fallback });
       } finally {
