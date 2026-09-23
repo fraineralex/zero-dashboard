@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root { --background:#f7f7f6; --panel:#fff; --foreground:#171717; --muted-foreground:#666; --muted:#f1f1ef; --border:#e5e5e2; --border-strong:#c9c9c5; --grid-line:#ededeb; --chart-1:0 0% 14%; --chart-2:169 36% 34%; --chart-3:27 58% 45%; --positive:#227447; --negative:#b64040; --header-height:58px; --nav-width:190px; --rail-width:248px; }
-@theme inline { --color-background:var(--background); --color-foreground:var(--foreground); --font-sans:var(--font-geist-sans); --font-mono:var(--font-geist-mono); }
+@theme inline { --color-background:var(--background); --color-foreground:var(--foreground); --color-card:var(--panel); --color-muted:var(--muted); --color-muted-foreground:var(--muted-foreground); --color-border:var(--border); --color-primary:var(--positive); --font-sans:var(--font-geist-sans); --font-mono:var(--font-geist-mono); }
 * { box-sizing:border-box; }
 html,body { min-height:100%; }
 body { margin:0; background:var(--background); color:var(--foreground); font-family:var(--font-geist-sans),sans-serif; font-size:14px; overflow-x:hidden; }
@@ -387,26 +387,35 @@ th,td { height:37px; padding:0 12px 0 0; border-bottom:1px solid #eeeeec; white-
   .comparison-tray-heading>div:last-child { justify-content:flex-start; }
 }
 
-/* Customer ranking: one cohort and one period throughout the canvas. */
+/* Ranking is a prepared shadcn table; scoped rules bridge the legacy table defaults. */
 .customer-ranking-card { padding-bottom:0; overflow:hidden; }
-.customer-ranking-head { display:grid; grid-template-columns:minmax(0,1fr) 220px; gap:20px; margin:18px -16px 0; padding:10px 21px; border-top:1px solid var(--border); border-bottom:1px solid var(--border); color:var(--muted-foreground); font:9px var(--font-geist-mono); letter-spacing:.06em; text-transform:uppercase; }
-.customer-ranking-head span:last-child { text-align:right; }
-.customer-ranking-list { margin:0 -16px; padding:0; list-style:none; }
-.customer-ranking-list li { min-height:63px; display:grid; grid-template-columns:32px minmax(0,1fr) 220px; align-items:center; gap:16px; padding:9px 21px; border-bottom:1px solid var(--border); }
-.customer-ranking-list li:last-child { border-bottom:0; }
-.customer-ranking-list li:hover { background:var(--muted); }
-.customer-ranking-position { color:var(--muted-foreground); font:11px var(--font-geist-mono); }
-.customer-ranking-list li:first-child .customer-ranking-position { color:var(--positive); }
-.customer-ranking-identity { display:flex; flex-direction:column; gap:3px; min-width:0; }
-.customer-ranking-identity strong { overflow:hidden; color:var(--foreground); font-size:11px; font-weight:620; text-overflow:ellipsis; white-space:nowrap; }
-.customer-ranking-identity small { color:var(--muted-foreground); font-size:9px; }
-.customer-ranking-measure { display:flex; flex-direction:column; align-items:flex-end; gap:7px; }
-.customer-ranking-measure strong { color:var(--foreground); font:600 12px var(--font-geist-mono); }
-.customer-ranking-track { width:100%; height:3px; display:block; overflow:hidden; border-radius:10px; background:var(--muted); }
-.customer-ranking-track>span { height:100%; display:block; border-radius:10px; background:var(--foreground); }
-.customer-ranking-list li:first-child .customer-ranking-track>span { background:var(--positive); }
+.customer-ranking-meta { display:flex; justify-content:space-between; gap:12px; margin:10px 17px 0; padding-bottom:11px; color:var(--muted-foreground); font:10px var(--font-geist-mono); }
+.customer-ranking-card [data-slot="table-container"] { border-top:1px solid var(--border); }
+.customer-ranking-table { table-layout:fixed; }
+.customer-ranking-table [data-slot="table-head"] { height:37px; border-bottom:1px solid var(--border); background:color-mix(in srgb,var(--muted) 55%,var(--panel)); padding:0 16px; color:var(--muted-foreground); font:9px var(--font-geist-mono); letter-spacing:.035em; }
+.customer-ranking-table [data-slot="table-cell"] { height:54px; padding:7px 16px; border-color:var(--border); color:var(--foreground); }
+.customer-ranking-table [data-slot="table-row"]:hover { background:color-mix(in srgb,var(--muted) 65%,var(--panel)); }
+.customer-ranking-table .ranking-index { width:60px; padding-left:19px; color:var(--muted-foreground); }
+.ranking-position { color:var(--muted-foreground); font:11px var(--font-geist-mono); }
+.customer-ranking-table tbody tr:first-child .ranking-position { color:var(--positive); font-weight:700; }
+.ranking-identity { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.ranking-identity strong { overflow:hidden; color:var(--foreground); font-size:11px; font-weight:610; text-overflow:ellipsis; white-space:nowrap; }
+.ranking-identity span { color:var(--muted-foreground); font-size:9px; }
+.customer-ranking-table .ranking-share { width:32%; }
+.ranking-share-content { display:flex; align-items:center; gap:11px; max-width:340px; }
+.ranking-share-content>span:last-child { width:42px; flex:0 0 auto; color:var(--muted-foreground); text-align:right; font:10px var(--font-geist-mono); }
+.ranking-track { display:block; width:100%; height:5px; overflow:hidden; border-radius:99px; background:var(--muted); }
+.ranking-track>span { display:block; height:100%; border-radius:99px; background:var(--foreground); }
+.customer-ranking-table tbody tr:first-child .ranking-track>span { background:var(--positive); }
+.customer-ranking-table .ranking-amount { width:24%; padding-right:19px; text-align:right; font:600 11px var(--font-geist-mono); font-variant-numeric:tabular-nums; }
+.customer-ranking-table [data-slot="table-footer"] [data-slot="table-cell"] { height:46px; border-top:1px solid var(--border); border-bottom:0; background:color-mix(in srgb,var(--muted) 52%,var(--panel)); font-weight:650; }
+.customer-ranking-table .ranking-empty { height:86px; text-align:center; color:var(--muted-foreground); }
 @media (max-width:640px) {
-  .customer-ranking-head { grid-template-columns:minmax(0,1fr) 110px; }
-  .customer-ranking-list li { grid-template-columns:24px minmax(0,1fr) 110px; gap:8px; }
-  .customer-ranking-identity small { font-size:8px; }
+  .customer-ranking-meta { font-size:9px; }
+  .customer-ranking-table .ranking-index { width:39px; padding-left:10px; }
+  .customer-ranking-table .ranking-share { display:none; }
+  .customer-ranking-table .ranking-amount { width:116px; padding-right:11px; font-size:10px; }
+  .customer-ranking-table [data-slot="table-cell"],.customer-ranking-table [data-slot="table-head"] { padding-left:6px; padding-right:6px; }
+  .ranking-identity strong { font-size:10px; }
+  .ranking-identity span { font-size:8px; }
 }

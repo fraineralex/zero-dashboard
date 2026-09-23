@@ -3,6 +3,7 @@ import "server-only";
 import { experimental_composeSpec, experimental_createEvaluator, type Spec } from "@json-render/core";
 import { z } from "zod";
 import { dashboardCatalog } from "@/lib/dashboard/catalog";
+import { CANVAS_DESIGN_GUIDELINES, validateCanvasDesign } from "@/lib/dashboard/design-system";
 import { resolveCandidates } from "@/lib/dashboard/candidates";
 import { buildIntentSpec } from "@/lib/dashboard/specs";
 import { deterministicCapabilityDecision, evaluateCapabilityDecision } from "@/lib/ui-memory/decision";
@@ -107,11 +108,16 @@ export async function POST(request: Request) {
           maxDepth: 4,
           signal: AbortSignal.timeout(22_000),
           instructions: {
-            root: "Keep one continuous analytical canvas. Reconfigure the existing layout instead of modeling navigation to another page.",
-            next: "Choose only configured evidence that answers the request. Preserve useful existing elements when the user asks to add, remove, compare, or restyle a measure.",
-            parent: "Place evidence in the root layout default slot in analytical reading order. Multiple requested measures should share one chart when a prepared combined-series candidate exists.",
+            root: `Keep one continuous analytical canvas. Reconfigure the existing layout instead of modeling navigation to another page.\n${CANVAS_DESIGN_GUIDELINES}`,
+            next: `Choose only configured evidence that answers the request. Preserve useful existing elements when the user asks to add, remove, compare, or restyle a measure.\n${CANVAS_DESIGN_GUIDELINES}`,
+            parent: `Place evidence in the root layout default slot in analytical reading order. Multiple requested measures should share one chart when a prepared combined-series candidate exists.\n${CANVAS_DESIGN_GUIDELINES}`,
           },
         })) {
+          const designIssue = validateCanvasDesign(event.spec as DashboardSpec);
+          if (designIssue) {
+            send({ type: event.type, spec: fallback, diagnostics: { mode: "deterministic", candidateCount: resolved.candidates.length, resolverMs: resolved.resolverMs, stopReason: `design-guardrail:${designIssue}`, uiMemory } });
+            continue;
+          }
           if (event.type === "step") {
             send({ type: "step", spec: event.spec, diagnostics: { mode: "jev", candidateCount: resolved.candidates.length, resolverMs: resolved.resolverMs, uiMemory } });
           } else {

@@ -4,6 +4,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import { ArrowDownRight, ArrowUpDown, ArrowUpRight, Check, ChevronRight, CircleAlert, Minus, Search, X } from "lucide-react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import { ChartContainer, ChartLegend, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { useDashboardStore } from "@/store/dashboard-store";
 
@@ -179,13 +180,25 @@ export function DataTable({ props }: { props: BaseCardProps & { data: Record<str
 
 export function CustomerRanking({ props }: { props: BaseCardProps & { data: { rank: number; id: string; name: string; segment: string; value: number }[] } }) {
   const maximum = Math.max(...props.data.map((row) => row.value), 1);
+  const total = props.data.reduce((sum, row) => sum + row.value, 0);
+  const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
   return <CardFrame {...props} className="customer-ranking-card">
-    <div className="customer-ranking-head"><span>Cliente</span><span>Facturación mensual</span></div>
-    <ol className="customer-ranking-list">{props.data.map((row) => <li key={row.id}>
-      <span className="customer-ranking-position">{String(row.rank).padStart(2, "0")}</span>
-      <span className="customer-ranking-identity"><strong>{row.name}</strong><small>{row.segment} · {row.id}</small></span>
-      <span className="customer-ranking-measure"><strong>{formatValue(row.value, "currency")}</strong><span className="customer-ranking-track"><span style={{ width: `${(row.value / maximum) * 100}%` }} /></span></span>
-    </li>)}</ol>
+    <div className="customer-ranking-meta"><span>{props.data.length} clientes identificados</span><span>USD · datos demo</span></div>
+    <Table className="customer-ranking-table">
+      <TableHeader><TableRow>
+        <TableHead className="ranking-index">#</TableHead>
+        <TableHead>Cliente</TableHead>
+        <TableHead className="ranking-share">Peso en el grupo</TableHead>
+        <TableHead className="ranking-amount">Facturación</TableHead>
+      </TableRow></TableHeader>
+      <TableBody>{props.data.length ? props.data.map((row) => <TableRow key={row.id}>
+        <TableCell className="ranking-index"><span className="ranking-position">{String(row.rank).padStart(2, "0")}</span></TableCell>
+        <TableCell><div className="ranking-identity"><strong title={row.name}>{row.name}</strong><span>{row.segment} · {row.id}</span></div></TableCell>
+        <TableCell className="ranking-share"><div className="ranking-share-content"><span className="ranking-track"><span style={{ width: `${(row.value / maximum) * 100}%` }} /></span><span>{total ? `${((row.value / total) * 100).toFixed(1)}%` : "0%"}</span></div></TableCell>
+        <TableCell className="ranking-amount">{currency.format(row.value)}</TableCell>
+      </TableRow>) : <TableRow><TableCell colSpan={4} className="ranking-empty">No hay clientes para este período.</TableCell></TableRow>}</TableBody>
+      {props.data.length ? <TableFooter><TableRow><TableCell colSpan={2}>Total del grupo</TableCell><TableCell className="ranking-share">100%</TableCell><TableCell className="ranking-amount">{currency.format(total)}</TableCell></TableRow></TableFooter> : null}
+    </Table>
   </CardFrame>;
 }
 
