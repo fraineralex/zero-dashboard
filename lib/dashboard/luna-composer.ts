@@ -56,7 +56,7 @@ export async function composeWithLuna(intent: string, candidates: Experimental_C
   for (const id of selected) {
     const candidate = blockById.get(id);
     if (!candidate) throw new Error("A generated block is not in the prepared catalog.");
-    elements[id] = structuredClone(candidate.element) as DashboardElement;
+    elements[id] = { ...(structuredClone(candidate.element) as DashboardElement), children: [] };
   }
   const composed: DashboardSpec = { root: "root", state: fallback.state ?? {}, elements };
   const designIssue = validateCanvasDesign(composed);
