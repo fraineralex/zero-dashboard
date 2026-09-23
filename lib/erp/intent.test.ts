@@ -70,6 +70,7 @@ describe("ERP request fidelity", () => {
 
   it("does not present an incomplete sample as a formal financial statement", () => {
     const sample = buildErpSpec("Últimos 10 asientos contables")!;
+    expect(sample.elements.root.props.title).toBe("Últimos 10 asientos contables");
     expect(requestFidelityIssue("Muéstrame el estado de resultados", sample)).toContain("cierre contable completo");
   });
 });

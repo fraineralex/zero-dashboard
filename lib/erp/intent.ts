@@ -58,7 +58,8 @@ export function buildErpSpec(intent: string, provider: ErpReadProvider = demoErp
   else if (query.mode === "largest") rows.sort((a, b) => Number(b.amount ?? b.net ?? 0) - Number(a.amount ?? a.net ?? 0));
   else if (query.collection !== "stock" && query.collection !== "payroll") rows.sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.id).localeCompare(String(a.id)));
   rows = rows.slice(0, query.count);
-  const title = `${query.mode === "low" ? "Inventario para reponer" : query.mode === "largest" ? "Mayores" : query.mode === "latest" ? "Últimas" : "Explorar"} ${query.mode === "low" ? "" : rows.length + " " + labels[query.collection]}`.trim();
+  const masculine = ["journalEntries", "stock", "payroll", "attendance"].includes(query.collection);
+  const title = query.mode === "low" ? "Inventario para reponer" : query.mode === "largest" ? `${rows.length} ${labels[query.collection]} de mayor importe` : query.mode === "latest" ? `${masculine ? "Últimos" : "Últimas"} ${rows.length} ${labels[query.collection]}` : `${rows.length} ${labels[query.collection]}`;
   const amount = rows.reduce((sum, row) => sum + Number(row.amount ?? row.net ?? 0), 0);
   const hasAmount = columns[query.collection].some((column) => column.key === "amount" || column.key === "net");
   return { root: "root", state: { erp: { collection: query.collection, count: rows.length, mode: query.mode, source: "demo" } }, elements: {
