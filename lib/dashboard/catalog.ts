@@ -8,7 +8,7 @@ const datum = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(),
 const series = z.array(z.object({
   key: z.string(),
   label: z.string(),
-  format: z.enum(["currency", "percent", "number"]).optional(),
+  format: z.enum(["currency", "dop", "percent", "number"]).optional(),
   axis: z.enum(["left", "right"]).optional(),
 }));
 
@@ -25,7 +25,7 @@ export const dashboardCatalog = defineCatalog(schema, {
     LineChartCard: { props: z.object({ ...base, data: z.array(datum), xKey: z.string(), series, format: z.string().optional(), action: z.string().optional() }), description: "A responsive shadcn line chart for time-series evidence." },
     AreaChartCard: { props: z.object({ ...base, data: z.array(datum), xKey: z.string(), series, format: z.string().optional() }), description: "A responsive shadcn area chart for volume or usage trends." },
     BarChartCard: { props: z.object({ ...base, data: z.array(datum), xKey: z.string(), series, format: z.string().optional(), horizontal: z.boolean().optional() }), description: "A responsive shadcn bar chart for discrete contribution comparisons." },
-    PieChartCard: { props: z.object({ ...base, data: z.array(datum), nameKey: z.string(), valueKey: z.string(), format: z.string().optional() }), description: "Prepared responsive pie chart for explicit part-to-whole requests. Uses application-owned categorical values, exact tooltip amounts, a visible legend, and theme tokens." },
+    PieChartCard: { props: z.object({ ...base, data: z.array(datum), nameKey: z.string(), valueKey: z.string(), format: z.string().optional(), unitLabel: z.string().optional() }), description: "Prepared responsive pie chart for explicit part-to-whole requests. Uses application-owned categorical values, exact tooltip amounts, a visible legend, and theme tokens." },
     ComparisonChart: { props: z.object({ ...base, data: z.array(datum), xKey: z.string(), series, format: z.string().optional() }), description: "A two-series shadcn chart for explicit comparisons." },
     DataTable: { props: z.object({ ...base, data: z.array(datum), columns: z.array(z.object({ key: z.string(), label: z.string(), format: z.string().optional() })), rowAction: z.string().optional(), currency: z.enum(["DOP"]).optional(), total: z.number().optional() }), description: "A configured data table with fixed columns and validated row actions." },
     EntityTrendTable: { props: z.object({ ...base, data: z.array(z.object({ id: z.string(), name: z.string(), segment: z.string(), status: z.string(), current: z.number(), previous: z.number(), change: z.number(), annualized: z.number(), history: z.array(z.object({ month: z.string(), value: z.number() })) })) }), description: "A searchable, sortable entity explorer combining identity, current billing, change, and individual trends with multi-entity comparison." },

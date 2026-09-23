@@ -8,6 +8,7 @@ export const CANVAS_DESIGN_GUIDELINES = [
   "For named customer histories use EntityTrendTable. For multiple measures in one plot use a prepared multi-series chart with correctly labeled units.",
   "For latest or recent named billing records use BillingLedger, sorted by event date descending, with the exact requested row count, names, dates, and amounts. Never replace it with revenue KPIs or a time-series chart.",
   "Honor explicit chart-form requests: a pie/tarta/pastel uses PieChartCard with categorical parts of one whole; do not substitute a customer view or a time-series line.",
+  "For ERP requests preserve source, filters, aggregation, units, dates, and requested visualization as one contract. Zero stock means available = 0, never merely below minimum. Employer payroll taxes are not employee deductions; paid amounts are not accrued amounts.",
   "Keep the layout compact: no orphan cards, artificial empty columns, filler metrics, or redundant explanations. Put the primary answer first, then only useful supporting evidence.",
   "Use existing surface, text, border, accent, and semantic tokens so the composition works in light and dark themes and on mobile.",
 ].join("\n");

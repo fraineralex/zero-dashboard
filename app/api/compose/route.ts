@@ -8,6 +8,8 @@ import { requestFidelityIssue, unavailableSpec } from "@/lib/dashboard/fidelity"
 import { composeWithLuna } from "@/lib/dashboard/luna-composer";
 import { resolveCandidates } from "@/lib/dashboard/candidates";
 import { buildIntentSpec } from "@/lib/dashboard/specs";
+import { buildDynamicErpSpec, shouldPlanDynamicErp } from "@/lib/erp/query";
+import { planErpWithLuna } from "@/lib/erp/luna-planner";
 import { deterministicCapabilityDecision, evaluateCapabilityDecision } from "@/lib/ui-memory/decision";
 import { findUiRecipe } from "@/lib/ui-memory/registry";
 import type { AnalyticsContext, DashboardSpec } from "@/types/analytics";
@@ -74,6 +76,7 @@ export async function POST(request: Request) {
   const resolved = resolveCandidates(context, payload.intent);
   const prepared = buildIntentSpec(payload.intent, context, payload.initialSpec);
   const preparedErp = Boolean(prepared.state?.erp);
+  const dynamicErp = payload.source !== "navigation" && shouldPlanDynamicErp(payload.intent, prepared);
   const fidelityIssue = payload.source === "navigation" ? null : requestFidelityIssue(payload.intent, prepared);
   const fallback = fidelityIssue ? unavailableSpec(fidelityIssue) : prepared;
   const memoryRecipe = findUiRecipe(payload.intent);
@@ -87,6 +90,39 @@ export async function POST(request: Request) {
       const send = (value: unknown) => controller.enqueue(encoder.encode(ndjson(value)));
       const focusedBilling = memoryRecipe?.id === "customer-billing-ranking" || memoryRecipe?.id === "recent-customer-billing";
       const explicitPie = Object.values(fallback.elements).some((element) => element.type === "PieChartCard");
+      if (dynamicErp) {
+        if (!apiKey) {
+          const unavailable = unavailableSpec("La planificación de esta consulta ERP requiere el modelo de composición, que no está configurado en este entorno.");
+          send({ type: "step", spec: unavailable, diagnostics: { mode: "development-fallback", stopReason: "erp-planner-unavailable" } });
+          send({ type: "complete", spec: unavailable });
+          controller.close();
+          return;
+        }
+        let uiMemory = deterministicCapabilityDecision(memoryRecipe);
+        try {
+          const evaluate = experimental_createEvaluator({ model: "typesafe-ai/jev", apiKey, timeoutMs: 10_000 });
+          uiMemory = await evaluateCapabilityDecision(payload.intent, memoryRecipe, evaluate, AbortSignal.timeout(4_500));
+        } catch (error) {
+          logCompositionFailure("jev-erp-preflight", error);
+        }
+        try {
+          const plan = await planErpWithLuna(payload.intent, AbortSignal.timeout(12_000));
+          const generated = buildDynamicErpSpec(plan, payload.intent);
+          const issue = validateCanvasDesign(generated) ?? requestFidelityIssue(payload.intent, generated);
+          const catalogResult = dashboardCatalog.validate(generated);
+          if (issue || !catalogResult.success) throw new Error(issue ?? "Generated ERP spec failed catalog validation.");
+          send({ type: "step", spec: generated, diagnostics: { mode: "luna", stopReason: "validated-erp-query-plan", uiMemory } });
+          send({ type: "complete", spec: generated });
+        } catch (error) {
+          logCompositionFailure("luna-erp-planning", error);
+          const unavailable = unavailableSpec("No pude componer esta consulta con los modelos y campos de la muestra ERP. No se sustituyó por datos de otro módulo.");
+          send({ type: "step", spec: unavailable, diagnostics: { mode: "deterministic", stopReason: "erp-query-plan-rejected", uiMemory } });
+          send({ type: "complete", spec: unavailable });
+        } finally {
+          controller.close();
+        }
+        return;
+      }
       if (fidelityIssue || focusedBilling || explicitPie || preparedErp || !apiKey) {
         // Explicit development path: all analysis and data are deterministic.
         // Production never silently claims an AI-selected composition here.

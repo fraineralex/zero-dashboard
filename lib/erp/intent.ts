@@ -1,4 +1,5 @@
 import { demoErpProvider, type ErpCollection, type ErpRecord, type ErpReadProvider } from "@/lib/erp/demo";
+import { buildSemanticErpSpec } from "@/lib/erp/query";
 import type { DashboardSpec } from "@/types/analytics";
 
 const clean = (text: string) => text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -6,16 +7,19 @@ type Column = { key: string; label: string; format?: string };
 const columns: Record<ErpCollection, Column[]> = {
   purchaseOrders: [{ key: "id", label: "Orden" }, { key: "date", label: "Fecha" }, { key: "supplier", label: "Proveedor" }, { key: "items", label: "Ítems" }, { key: "amount", label: "Total", format: "dop" }, { key: "status", label: "Estado" }],
   salesOrders: [{ key: "id", label: "Orden" }, { key: "date", label: "Fecha" }, { key: "customer", label: "Cliente" }, { key: "items", label: "Ítems" }, { key: "amount", label: "Total", format: "dop" }, { key: "status", label: "Estado" }],
+  salesLines: [{ key: "product", label: "Producto" }, { key: "quantity", label: "Unidades" }, { key: "subtotal", label: "Venta", format: "dop" }, { key: "orderId", label: "Orden" }],
   vendorBills: [{ key: "id", label: "Factura" }, { key: "supplier", label: "Proveedor" }, { key: "date", label: "Emisión" }, { key: "due", label: "Vencimiento" }, { key: "amount", label: "Importe", format: "dop" }, { key: "status", label: "Estado" }],
   customerInvoices: [{ key: "id", label: "Factura" }, { key: "customer", label: "Cliente" }, { key: "date", label: "Emisión" }, { key: "due", label: "Vencimiento" }, { key: "amount", label: "Importe", format: "dop" }, { key: "status", label: "Estado" }],
   journalEntries: [{ key: "id", label: "Asiento" }, { key: "date", label: "Fecha" }, { key: "reference", label: "Referencia" }, { key: "account", label: "Cuenta" }, { key: "debit", label: "Débito", format: "dop" }, { key: "credit", label: "Crédito", format: "dop" }],
   stock: [{ key: "id", label: "SKU" }, { key: "product", label: "Producto" }, { key: "warehouse", label: "Almacén" }, { key: "available", label: "Disponible" }, { key: "minimum", label: "Mínimo" }, { key: "status", label: "Estado" }],
   payroll: [{ key: "id", label: "Empleado" }, { key: "employee", label: "Nombre" }, { key: "department", label: "Departamento" }, { key: "gross", label: "Bruto", format: "dop" }, { key: "deductions", label: "Descuentos", format: "dop" }, { key: "net", label: "Neto", format: "dop" }],
+  payrollRuns: [{ key: "period", label: "Mes" }, { key: "gross", label: "Bruto", format: "dop" }, { key: "net", label: "Neto", format: "dop" }, { key: "employerTaxes", label: "Aportes empresa", format: "dop" }, { key: "employerCost", label: "Costo total", format: "dop" }],
+  payrollTaxPayments: [{ key: "id", label: "Pago" }, { key: "date", label: "Fecha" }, { key: "type", label: "Concepto" }, { key: "amount", label: "Pagado", format: "dop" }, { key: "status", label: "Estado" }],
   attendance: [{ key: "date", label: "Fecha" }, { key: "employee", label: "Empleado" }, { key: "department", label: "Departamento" }, { key: "checkIn", label: "Entrada" }, { key: "checkOut", label: "Salida" }, { key: "status", label: "Estado" }],
 };
-const labels: Record<ErpCollection, string> = { purchaseOrders: "órdenes de compra a proveedores", salesOrders: "órdenes de venta", vendorBills: "facturas de proveedores", customerInvoices: "facturas de clientes", journalEntries: "asientos contables", stock: "productos en inventario", payroll: "registros de nómina", attendance: "registros de asistencia" };
+const labels: Record<ErpCollection, string> = { purchaseOrders: "órdenes de compra a proveedores", salesOrders: "órdenes de venta", salesLines: "líneas de venta", vendorBills: "facturas de proveedores", customerInvoices: "facturas de clientes", journalEntries: "asientos contables", stock: "productos en inventario", payroll: "registros de nómina", payrollRuns: "nóminas mensuales", payrollTaxPayments: "pagos patronales", attendance: "registros de asistencia" };
 
-export function parseErpIntent(intent: string): { collection: ErpCollection; count: number; mode: "latest" | "largest" | "low" | "all" } | null {
+export function parseErpIntent(intent: string): { collection: ErpCollection; count: number; mode: "latest" | "largest" | "low" | "zero" | "all" } | null {
   const text = clean(intent);
   const purchasing = /compras?|proveedor|purchase|vendor/.test(text);
   let collection: ErpCollection | null = null;
@@ -28,11 +32,13 @@ export function parseErpIntent(intent: string): { collection: ErpCollection; cou
   else if (/(?:ordenes?|pedidos?)\s+(?:de\s+)?ventas?|ventas?.*(?:orden|pedido)/.test(text)) collection = "salesOrders";
   if (!collection) return null;
   const count = Math.max(1, Number(text.match(/\b(\d{1,2})\b/)?.[1] ?? 10));
-  const mode = /bajo|baja|agotad|reponer|minimum|low stock/.test(text) && collection === "stock" ? "low" : /mayores?|mas (?:altos?|grandes?|costosos?)|top|highest/.test(text) ? "largest" : /ultim|recient|recent|latest/.test(text) ? "latest" : "all";
+  const mode = /sin stock|sin existencias?|agotad|stock(?:\s*=\s*|\s+igual a\s+)0|inventario(?:\s*=\s*|\s+igual a\s+)0/.test(text) && collection === "stock" ? "zero" : /bajo|baja|reponer|minimum|low stock/.test(text) && collection === "stock" ? "low" : /mayores?|mas (?:altos?|grandes?|costosos?)|top|highest/.test(text) ? "largest" : /ultim|recient|recent|latest/.test(text) ? "latest" : "all";
   return { collection, count, mode };
 }
 
 export function buildErpSpec(intent: string, provider: ErpReadProvider = demoErpProvider): DashboardSpec | null {
+  const semantic = buildSemanticErpSpec(intent, provider);
+  if (semantic) return semantic;
   const text = clean(intent);
   if (/compras?/.test(text) && /ventas?/.test(text) && /compar|combina|evolucion|tendencia|grafico|grafica/.test(text)) {
     const purchases = provider.list("purchaseOrders");
@@ -54,12 +60,13 @@ export function buildErpSpec(intent: string, provider: ErpReadProvider = demoErp
   const query = parseErpIntent(intent);
   if (!query) return null;
   let rows: ErpRecord[] = [...provider.list(query.collection)];
-  if (query.mode === "low") rows = rows.filter((row) => Number(row.available) < Number(row.minimum)).sort((a, b) => Number(a.available) - Number(b.available));
+  if (query.mode === "zero") rows = rows.filter((row) => Number(row.available) === 0);
+  else if (query.mode === "low") rows = rows.filter((row) => Number(row.available) < Number(row.minimum)).sort((a, b) => Number(a.available) - Number(b.available));
   else if (query.mode === "largest") rows.sort((a, b) => Number(b.amount ?? b.net ?? 0) - Number(a.amount ?? a.net ?? 0));
   else if (query.collection !== "stock" && query.collection !== "payroll") rows.sort((a, b) => String(b.date).localeCompare(String(a.date)) || String(b.id).localeCompare(String(a.id)));
   rows = rows.slice(0, query.count);
   const masculine = ["journalEntries", "stock", "payroll", "attendance"].includes(query.collection);
-  const title = query.mode === "low" ? "Inventario para reponer" : query.mode === "largest" ? `${rows.length} ${labels[query.collection]} de mayor importe` : query.mode === "latest" ? `${masculine ? "Últimos" : "Últimas"} ${rows.length} ${labels[query.collection]}` : `${rows.length} ${labels[query.collection]}`;
+  const title = query.mode === "zero" ? "Productos sin stock" : query.mode === "low" ? "Inventario para reponer" : query.mode === "largest" ? `${rows.length} ${labels[query.collection]} de mayor importe` : query.mode === "latest" ? `${masculine ? "Últimos" : "Últimas"} ${rows.length} ${labels[query.collection]}` : `${rows.length} ${labels[query.collection]}`;
   const amount = rows.reduce((sum, row) => sum + Number(row.amount ?? row.net ?? 0), 0);
   const hasAmount = columns[query.collection].some((column) => column.key === "amount" || column.key === "net");
   return { root: "root", state: { erp: { collection: query.collection, count: rows.length, mode: query.mode, source: "demo" } }, elements: {

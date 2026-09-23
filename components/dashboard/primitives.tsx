@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 import { useDashboardStore } from "@/store/dashboard-store";
 
 type BaseCardProps = { title: string; description?: string; span?: string };
-type Series = { key: string; label: string; format?: "currency" | "percent" | "number"; axis?: "left" | "right" };
+type Series = { key: string; label: string; format?: "currency" | "dop" | "percent" | "number"; axis?: "left" | "right" };
 type ChartRow = Record<string, string | number | boolean | null>;
 type BillingProfile = { id: string; name: string; segment: string; status: string; current: number; previous: number; change: number; annualized: number; history: { month: string; value: number }[] };
 const exactUsd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -149,12 +149,13 @@ export function BarChartCard({ props }: { props: BaseCardProps & { data: ChartRo
   );
 }
 
-export function PieChartCard({ props }: { props: BaseCardProps & { data: ChartRow[]; nameKey: string; valueKey: string; format?: string } }) {
+export function PieChartCard({ props }: { props: BaseCardProps & { data: ChartRow[]; nameKey: string; valueKey: string; format?: string; unitLabel?: string } }) {
   const values = props.data.map((row) => ({ name: String(row[props.nameKey] ?? ""), value: Number(row[props.valueKey] ?? 0) })).filter((row) => Number.isFinite(row.value) && row.value > 0);
   const total = values.reduce((sum, row) => sum + row.value, 0);
   const maximum = values.reduce((best, row) => row.value > best.value ? row : best, { name: "", value: 0 });
   const exact = (value: number) => props.format === "currency"
     ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value)
+    : props.format === "dop" ? new Intl.NumberFormat("es-DO", { style: "currency", currency: "DOP", maximumFractionDigits: 0 }).format(value)
     : new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(value);
 
   return <CardFrame {...props} className="pie-chart-card">
@@ -173,7 +174,7 @@ export function PieChartCard({ props }: { props: BaseCardProps & { data: ChartRo
         </PieChart>
       </ChartContainer>
       <div className="pie-detail">
-        <div className="pie-summary"><span>Suma del período</span><strong>{exact(total)}</strong><small>Mes más alto: {maximum.name} · {exact(maximum.value)}</small></div>
+        <div className="pie-summary"><span>{props.unitLabel ?? "Suma del período"}</span><strong>{exact(total)}</strong><small>Mayor porción: {maximum.name} · {exact(maximum.value)}</small></div>
         <ol className="pie-legend">{values.map((row, index) => <li key={row.name}><span className="pie-swatch" style={{ background: `var(--pie-${(index % 12) + 1})` }} /><span>{row.name}</span><strong>{total ? ((row.value / total) * 100).toFixed(1) : "0"}%</strong></li>)}</ol>
       </div>
     </div> : <p className="pie-empty">No hay valores positivos para este período.</p>}

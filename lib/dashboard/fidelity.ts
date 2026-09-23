@@ -1,5 +1,6 @@
 import { parseCustomerBillingRanking, parseRecentCustomerBilling } from "@/lib/ui-memory/registry";
 import { parseErpIntent } from "@/lib/erp/intent";
+import { dynamicFidelityIssue, semanticFidelityIssue } from "@/lib/erp/query";
 import type { DashboardElement, DashboardSpec } from "@/types/analytics";
 
 const normalize = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -7,6 +8,10 @@ const rows = (element: DashboardElement | undefined) => Array.isArray(element?.p
 
 export function requestFidelityIssue(intent: string, spec: DashboardSpec): string | null {
   const value = normalize(intent);
+  const semanticIssue = semanticFidelityIssue(intent, spec);
+  if (semanticIssue !== undefined) return semanticIssue;
+  const dynamicIssue = dynamicFidelityIssue(intent, spec);
+  if (dynamicIssue !== undefined) return dynamicIssue;
   if (/estado de resultados|balance general|balance de comprobacion|utilidad neta|flujo de efectivo/.test(value)) return "La muestra ERP no contiene un cierre contable completo; no sería correcto presentar un estado financiero formal.";
   const erp = parseErpIntent(intent);
   if (!erp && ["salesAndPurchases", "purchasesBySupplier"].includes((spec.state?.erp as { collection?: string } | undefined)?.collection ?? "")) return null;
