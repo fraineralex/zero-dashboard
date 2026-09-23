@@ -2,7 +2,7 @@
 
 import { type ReactNode, useMemo, useState } from "react";
 import { ArrowDownRight, ArrowUpDown, ArrowUpRight, Check, ChevronRight, CircleAlert, Minus, Search, X } from "lucide-react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
 import { ChartContainer, ChartLegend, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
@@ -145,6 +145,37 @@ export function BarChartCard({ props }: { props: BaseCardProps & { data: ChartRo
       </ChartContainer>
     </CardFrame>
   );
+}
+
+export function PieChartCard({ props }: { props: BaseCardProps & { data: ChartRow[]; nameKey: string; valueKey: string; format?: string } }) {
+  const values = props.data.map((row) => ({ name: String(row[props.nameKey] ?? ""), value: Number(row[props.valueKey] ?? 0) })).filter((row) => Number.isFinite(row.value) && row.value > 0);
+  const total = values.reduce((sum, row) => sum + row.value, 0);
+  const maximum = values.reduce((best, row) => row.value > best.value ? row : best, { name: "", value: 0 });
+  const exact = (value: number) => props.format === "currency"
+    ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(value)
+    : new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(value);
+
+  return <CardFrame {...props} className="pie-chart-card">
+    {values.length ? <div className="pie-card-body">
+      <ChartContainer config={{ value: { label: props.title } }} className="pie-graphic" aria-label={`${props.title}: ${values.map((row) => `${row.name} ${exact(row.value)}`).join(", ")}`}>
+        <PieChart>
+          <Pie data={values} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius="82%" paddingAngle={1} stroke="var(--panel)" strokeWidth={2} isAnimationActive={false}>
+            {values.map((row, index) => <Cell key={row.name} fill={`var(--pie-${(index % 12) + 1})`} />)}
+          </Pie>
+          <ChartTooltip content={({ active, payload }) => {
+            const entry = payload?.[0];
+            const value = Number(entry?.value ?? 0);
+            if (!active || !entry) return null;
+            return <div className="chart-tooltip pie-tooltip"><span>{String(entry.name)}</span><strong>{exact(value)}</strong><small>{total ? ((value / total) * 100).toFixed(1) : "0"}% del período</small></div>;
+          }} />
+        </PieChart>
+      </ChartContainer>
+      <div className="pie-detail">
+        <div className="pie-summary"><span>Suma del período</span><strong>{exact(total)}</strong><small>Mes más alto: {maximum.name} · {exact(maximum.value)}</small></div>
+        <ol className="pie-legend">{values.map((row, index) => <li key={row.name}><span className="pie-swatch" style={{ background: `var(--pie-${(index % 12) + 1})` }} /><span>{row.name}</span><strong>{total ? ((row.value / total) * 100).toFixed(1) : "0"}%</strong></li>)}</ol>
+      </div>
+    </div> : <p className="pie-empty">No hay valores positivos para este período.</p>}
+  </CardFrame>;
 }
 
 export function InsightCard({ props }: { props: { eyebrow: string; title: string; body: string; stat: string; actionLabel?: string; actionIntent?: string; span?: string; tone?: string } }) {

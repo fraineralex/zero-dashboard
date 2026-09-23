@@ -158,6 +158,41 @@ function acquisitionSpec(): DashboardSpec {
 type CustomSeries = { key: string; label: string; format: "currency" | "percent" | "number"; axis?: "left" | "right" };
 
 const normalizeIntent = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const asksForPie = (normalized: string) => /\btarta\b|\bpastel\b|\bpie\b|\bdonut\b|\bdona\b|grafico circular/.test(normalized);
+
+function salesPieSpec(normalized: string): DashboardSpec | null {
+  if (!asksForPie(normalized) || !/venta|sales|ingreso|revenue|factur|mrr/.test(normalized)) return null;
+  const monthly = /mensual|month|por mes|cada mes|mes a mes/.test(normalized);
+  const country = !monthly && /pais|country|geograf|region/.test(normalized);
+  const segment = !monthly && !country && /segment/.test(normalized);
+  const dimension = monthly ? "mes" : country ? "país" : segment ? "segmento" : "plan";
+  const data = monthly
+    ? analytics.revenue.history.map((row) => ({ name: row.month, value: row.revenue }))
+    : country ? analytics.revenue.byCountry : segment ? analytics.revenue.bySegment : analytics.revenue.byPlan;
+  const periodLabel = monthly ? "12 meses" : "Sep 2026";
+  return {
+    root: "root",
+    state: {},
+    elements: {
+      root: node("AnalysisGrid", {
+        title: monthly ? "Ventas mensuales" : `Ventas por ${dimension}`,
+        subtitle: `${monthly ? "Oct 2025 – Sep 2026" : "Septiembre 2026"} · Distribución del MRR demo`,
+        periodLabel,
+      }, ["salesPie"]),
+      salesPie: node("PieChartCard", {
+        title: `Ventas por ${dimension}`,
+        description: monthly
+          ? "Cada porción representa el peso de un mes en la suma de los 12 valores de MRR demo; no son ventas transaccionales."
+          : `Participación de cada ${dimension} en el MRR de septiembre de 2026 (datos demo); no son ventas transaccionales.`,
+        data,
+        nameKey: "name",
+        valueKey: "value",
+        format: "currency",
+        span: "wide",
+      }),
+    },
+  };
+}
 
 function requestedSeries(intent: string, daily: boolean): CustomSeries[] {
   const normalized = normalizeIntent(intent);
@@ -255,6 +290,8 @@ export function buildIntentSpec(intent: string, context: AnalyticsContext, initi
   const normalized = normalizeIntent(intent);
   const rememberedSpec = buildUiMemorySpec(intent);
   if (rememberedSpec) return rememberedSpec;
+  const pieSpec = salesPieSpec(normalized);
+  if (pieSpec) return pieSpec;
   const isIncrementalEdit = /agrega|anade|incluye|quita|remueve|elimina|cambia|remove|add|switch/.test(normalized);
   const accountingSpec = isIncrementalEdit ? null : accountingIntentSpec(intent, normalized);
   if (accountingSpec) return accountingSpec;

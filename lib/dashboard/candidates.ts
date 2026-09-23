@@ -14,6 +14,7 @@ const descriptions: Record<string, string> = {
   LineChartCard: "Prepared time-series evidence with application-owned values.",
   AreaChartCard: "Prepared volume trend with application-owned values.",
   BarChartCard: "Prepared categorical comparison with application-owned values.",
+  PieChartCard: "Prepared part-to-whole chart when the user explicitly asks for a pie, tarta, or pastel. Uses application-owned values and a full labeled legend.",
   ComparisonChart: "Prepared two-series comparison with application-owned values.",
   DataTable: "Prepared ranked records with fixed columns and approved actions.",
   EntityTrendTable: "UI Memory recipe for identifiable customers with current billing, individual twelve-month trends, search, sorting, and multi-customer comparison.",

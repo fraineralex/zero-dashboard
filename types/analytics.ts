@@ -156,7 +156,7 @@ export type DashboardSpec = {
 
 export type CompositionDiagnostics = {
   source: "navigation" | "suggestion" | "text" | "voice";
-  mode: "deterministic" | "jev" | "development-fallback";
+  mode: "deterministic" | "jev" | "luna" | "development-fallback";
   candidateCount: number;
   selectedComponents: string[];
   layout: string;

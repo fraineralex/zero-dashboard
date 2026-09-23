@@ -4,6 +4,7 @@ import { experimental_composeSpec, experimental_createEvaluator, type Spec } fro
 import { z } from "zod";
 import { dashboardCatalog } from "@/lib/dashboard/catalog";
 import { CANVAS_DESIGN_GUIDELINES, validateCanvasDesign } from "@/lib/dashboard/design-system";
+import { composeWithLuna } from "@/lib/dashboard/luna-composer";
 import { resolveCandidates } from "@/lib/dashboard/candidates";
 import { buildIntentSpec } from "@/lib/dashboard/specs";
 import { deterministicCapabilityDecision, evaluateCapabilityDecision } from "@/lib/ui-memory/decision";
@@ -67,17 +68,18 @@ export async function POST(request: Request) {
     async start(controller) {
       const send = (value: unknown) => controller.enqueue(encoder.encode(ndjson(value)));
       const focusedRanking = memoryRecipe?.id === "customer-billing-ranking";
-      if (focusedRanking || !apiKey) {
+      const explicitPie = Object.values(fallback.elements).some((element) => element.type === "PieChartCard");
+      if (focusedRanking || explicitPie || !apiKey) {
         // Explicit development path: all analysis and data are deterministic.
         // Production never silently claims an AI-selected composition here.
         send({
           type: "step",
           spec: fallback,
           diagnostics: {
-            mode: focusedRanking ? "deterministic" : "development-fallback",
+            mode: focusedRanking || explicitPie ? "deterministic" : "development-fallback",
             candidateCount: resolved.candidates.length,
             resolverMs: resolved.resolverMs,
-            stopReason: focusedRanking ? "focused-ranking-recipe" : "no-ai-gateway-key",
+            stopReason: focusedRanking ? "focused-ranking-recipe" : explicitPie ? "explicit-pie-request" : "no-ai-gateway-key",
             uiMemory: deterministicCapabilityDecision(memoryRecipe),
           },
         });
@@ -94,6 +96,19 @@ export async function POST(request: Request) {
         } catch {
           // Composition remains available when the optional capability preflight times out.
         }
+        if (uiMemory.decision === "reuse_recipe" && memoryRecipe) {
+          send({ type: "step", spec: fallback, diagnostics: { mode: "deterministic", candidateCount: resolved.candidates.length, resolverMs: resolved.resolverMs, stopReason: "reused-prepared-recipe", uiMemory } });
+          send({ type: "complete", spec: fallback });
+          return;
+        }
+        try {
+          const generated = await composeWithLuna(payload.intent, resolved.candidates, fallback, AbortSignal.timeout(10_000));
+          send({ type: "step", spec: generated, diagnostics: { mode: "luna", candidateCount: resolved.candidates.length, resolverMs: resolved.resolverMs, uiMemory } });
+          send({ type: "complete", spec: generated, diagnostics: { mode: "luna", stopReason: "validated-luna-composition", uiMemory } });
+          return;
+        } catch {
+          // Jev can still assemble prepared candidates if generation is unavailable or invalid.
+        }
         for await (const event of experimental_composeSpec({
           catalog: dashboardCatalog,
           candidates: resolved.candidates,
@@ -106,7 +121,7 @@ export async function POST(request: Request) {
           maxSteps: 12,
           maxElements: 20,
           maxDepth: 4,
-          signal: AbortSignal.timeout(22_000),
+          signal: AbortSignal.timeout(12_000),
           instructions: {
             root: `Keep one continuous analytical canvas. Reconfigure the existing layout instead of modeling navigation to another page.\n${CANVAS_DESIGN_GUIDELINES}`,
             next: `Choose only configured evidence that answers the request. Preserve useful existing elements when the user asks to add, remove, compare, or restyle a measure.\n${CANVAS_DESIGN_GUIDELINES}`,
@@ -125,7 +140,8 @@ export async function POST(request: Request) {
           }
         }
       } catch {
-        send({ type: "error", message: "Jev could not compose this view. Your current dashboard has been preserved." });
+        send({ type: "step", spec: fallback, diagnostics: { mode: "deterministic", candidateCount: resolved.candidates.length, resolverMs: resolved.resolverMs, stopReason: "model-composition-unavailable", uiMemory: deterministicCapabilityDecision(memoryRecipe) } });
+        send({ type: "complete", spec: fallback });
       } finally {
         controller.close();
       }

@@ -99,6 +99,6 @@ export function contextFromIntent(intent: string, current: AnalyticsContext): An
   if (/acquisition|adquisicion|conversion|funnel|embudo|source|fuente/.test(normalized)) return createContext("acquisition");
   if (/retention|retencion|churn|abandono|cohort|cohorte/.test(normalized)) return createContext("retention");
   if (/customer|cliente|account|cuenta/.test(normalized)) return createContext("customers");
-  if (/revenue|ingreso|entrada de dinero|cash|cobro|mrr|arr|plan|factur/.test(normalized)) return createContext("revenue");
+  if (/revenue|ingreso|entrada de dinero|cash|cobro|mrr|arr|plan|factur|venta|sales/.test(normalized)) return createContext("revenue");
   return { ...current, investigation: current.investigation };
 }
