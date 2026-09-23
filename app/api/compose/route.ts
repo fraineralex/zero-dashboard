@@ -61,7 +61,9 @@ export async function POST(request: Request) {
   const resolved = resolveCandidates(context, payload.intent);
   const fallback = buildIntentSpec(payload.intent, context, payload.initialSpec);
   const memoryRecipe = findUiRecipe(payload.intent);
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
+  // Vercel supplies a short-lived OIDC token to deployed functions. The AI SDK
+  // uses it automatically for Luna; Jev's direct evaluator needs it explicitly.
+  const apiKey = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
@@ -79,7 +81,7 @@ export async function POST(request: Request) {
             mode: focusedRanking || explicitPie ? "deterministic" : "development-fallback",
             candidateCount: resolved.candidates.length,
             resolverMs: resolved.resolverMs,
-            stopReason: focusedRanking ? "focused-ranking-recipe" : explicitPie ? "explicit-pie-request" : "no-ai-gateway-key",
+            stopReason: focusedRanking ? "focused-ranking-recipe" : explicitPie ? "explicit-pie-request" : "no-ai-gateway-credentials",
             uiMemory: deterministicCapabilityDecision(memoryRecipe),
           },
         });
