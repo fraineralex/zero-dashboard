@@ -13,6 +13,18 @@ export type UiRecipeManifest = {
 
 export const UI_MEMORY_RECIPES: UiRecipeManifest[] = [
   {
+    id: "customer-billing-ranking",
+    version: 1,
+    name: "Customer Billing Ranking",
+    origin: "curated",
+    capabilities: ["ranked-customers", "requested-row-limit", "monthly-billing", "cohort-only-summary"],
+    intentExamples: [
+      "Muéstrame los 10 clientes que más han facturado este mes",
+      "Top 5 customers by billing last month",
+    ],
+    requiredData: ["customer.id", "customer.name", "billing.monthly"],
+  },
+  {
     id: "customer-billing-explorer",
     version: 1,
     name: "Customer Billing Explorer",
@@ -29,22 +41,71 @@ export const UI_MEMORY_RECIPES: UiRecipeManifest[] = [
 
 const normalize = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
+export function parseCustomerBillingRanking(intent: string) {
+  const value = normalize(intent);
+  const asksForCustomers = /\b(cliente|clientes|usuario|usuarios|customer|customers|account|accounts)\b/.test(value);
+  const asksForBilling = /factur|billing|revenue|ingreso|mrr/.test(value);
+  const asksForRanking = /\btop\b|\bprimeros?\b|\bmayor(?:es)?\b|\bmas\b|\bhighest\b|\bmost\b|\bmenor(?:es)?\b|\bmenos\b|\blowest\b/.test(value);
+  if (!asksForCustomers || !asksForBilling || !asksForRanking) return null;
+  const countMatch = value.match(/\b(?:top|primeros?|first)?\s*(\d{1,2})\s+(?:clientes?|usuarios?|customers?|accounts?)\b/)
+    ?? value.match(/\b(?:top|primeros?|first)\s*(\d{1,2})\b/);
+  const count = Math.min(50, Math.max(1, Number(countMatch?.[1] ?? 10)));
+  const monthIndex = /mes pasado|mes anterior|last month|previous month/.test(value) ? 10 : 11;
+  const direction = /\b(menos|menor(?:es)?|lowest|least)\b/.test(value) ? "asc" : "desc";
+  return { count, monthIndex, direction } as const;
+}
+
 export function findUiRecipe(intent: string) {
+  if (parseCustomerBillingRanking(intent)) return UI_MEMORY_RECIPES[0];
   const value = normalize(intent);
   const asksForPeople = /usuario|cliente|customer|account|cuenta/.test(value);
   const asksForBilling = /factura|facturacion|billing|revenue|ingreso|mrr/.test(value);
   const asksForTrend = /tendencia|trend|evolucion|historial|history|comportamiento/.test(value);
   const asksForIdentity = /nombre|identific|quien|who|usuario|cliente/.test(value);
-  return asksForPeople && asksForBilling && asksForTrend && asksForIdentity ? UI_MEMORY_RECIPES[0] : null;
+  return asksForPeople && asksForBilling && asksForTrend && asksForIdentity ? UI_MEMORY_RECIPES[1] : null;
 }
 
 const node = (type: string, props: Record<string, unknown>): DashboardElement => ({ type, props });
 const money = (value: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(value);
 
+function buildCustomerRankingSpec(intent: string): DashboardSpec | null {
+  const ranking = parseCustomerBillingRanking(intent);
+  if (!ranking) return null;
+  const recipe = UI_MEMORY_RECIPES[0];
+  const period = ranking.monthIndex === 11 ? "Septiembre 2026" : "Agosto 2026";
+  const rows = [...analytics.customers.billingProfiles]
+    .sort((a, b) => ranking.direction === "desc"
+      ? b.history[ranking.monthIndex].value - a.history[ranking.monthIndex].value
+      : a.history[ranking.monthIndex].value - b.history[ranking.monthIndex].value)
+    .slice(0, ranking.count)
+    .map((profile, index) => ({
+      rank: index + 1,
+      id: profile.id,
+      name: profile.name,
+      segment: profile.segment,
+      value: profile.history[ranking.monthIndex].value,
+    }));
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
+  const directionLabel = ranking.direction === "desc" ? "mayor" : "menor";
+  return {
+    root: "root",
+    state: { uiMemory: { recipeId: recipe.id, recipeVersion: recipe.version, recipeName: recipe.name, origin: recipe.origin } },
+    elements: {
+      root: { type: "TableFocus", props: { title: `${ranking.count} clientes con ${directionLabel} facturación`, subtitle: `${period} · Facturación recurrente mensual`, periodLabel: period }, children: ["cohortTotal", "cohortAverage", "leader", "ranking"] },
+      cohortTotal: node("MetricCard", { label: `Total de los ${rows.length} clientes`, value: money(total), delta: "MRR", tone: "neutral", helper: period }),
+      cohortAverage: node("MetricCard", { label: "Promedio de este grupo", value: money(total / rows.length), delta: "MRR", tone: "neutral", helper: `${rows.length} clientes del ranking` }),
+      leader: node("MetricCard", { label: `Puesto #1 · ${rows[0]?.name ?? "—"}`, value: money(rows[0]?.value ?? 0), delta: "MRR", tone: "neutral", helper: period }),
+      ranking: node("CustomerRanking", { title: "Ranking de clientes", description: `${rows.length} clientes ordenados por facturación recurrente de ${period.toLowerCase()}. Los importes proceden de datos demo de MRR.`, data: rows, span: "wide" }),
+    },
+  };
+}
+
 export function buildUiMemorySpec(intent: string): DashboardSpec | null {
+  const rankingSpec = buildCustomerRankingSpec(intent);
+  if (rankingSpec) return rankingSpec;
   const recipe = findUiRecipe(intent);
   if (!recipe) return null;
-  const profiles = analytics.customers.billingProfiles;
+  const profiles = analytics.customers.billingProfiles.slice(0, 14);
   const declining = profiles.filter((profile) => profile.change < 0);
   const growing = profiles.filter((profile) => profile.change > 0);
   const visibleMrr = profiles.reduce((sum, profile) => sum + profile.current, 0);

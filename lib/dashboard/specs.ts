@@ -235,7 +235,7 @@ function accountingIntentSpec(intent: string, normalized: string): DashboardSpec
       detail: node("DataTable", { title: "Payment schedule", description: "Obligations grouped by due window", data: a.payablesAging, columns: [{ key: "bucket", label: "Due window" }, { key: "amount", label: "Amount", format: "currency" }, { key: "bills", label: "Bills" }], span: "wide" }),
     }, ["total", "dueSoon", "liquidity", "aging", "detail"]);
   }
-  if (/estado de resultado|perdida(s)? y ganancia|profit|utilidad|beneficio|gasto|expense|p\s*&\s*l/.test(normalized)) {
+  if (/estado de resultado|perdida(s)? y ganancia|profit and loss|p\s*&\s*l/.test(normalized)) {
     const latest = a.monthly.at(-1)!;
     const requested = requestedSeries(intent, false);
     const trendSeries = requested.length > 1 ? requested : [{ key: "revenue", label: "Revenue", format: "currency" as const }, { key: "totalExpenses", label: "Expenses", format: "currency" as const }, { key: "netProfit", label: "Net profit", format: "currency" as const }];
@@ -260,11 +260,12 @@ export function buildIntentSpec(intent: string, context: AnalyticsContext, initi
   if (accountingSpec) return accountingSpec;
   const previousChart = initialSpec ? Object.values(initialSpec.elements).find((element) => ["LineChartCard", "AreaChartCard", "BarChartCard", "ComparisonChart"].includes(element.type)) : undefined;
   const previousWasDaily = previousChart?.props.xKey === "day";
-  const daily = /dia a dia|diari|por dia|cada dia|daily/.test(normalized) || (previousWasDaily && /agrega|anade|incluye|quita|cambia|muestra/.test(normalized));
+  const daily = /dia a dia|diari|por dia|cada dia|daily/.test(normalized)
+    || (previousWasDaily && isIncrementalEdit && /entrada|salida|cash|cobro|suscrip|subscription|factur|invoice|reembolso|refund|neto|flujo de caja|nuevo.*cliente|pago.*fallido/.test(normalized));
   const explicitlyCustom = daily || isIncrementalEdit || /grafico|grafica|chart|visual|linea|barra|area|combina|mezcla|evolucion|tendencia|trend/.test(normalized);
   if ((context.investigation || context.entityId) && !explicitlyCustom) return buildDefaultSpec(context);
   let series = requestedSeries(intent, daily);
-  const asksVisual = daily || isIncrementalEdit || series.length > 1 || /grafico|grafica|chart|visual|linea|barra|area|combina|mezcla|compara|evolucion|tendencia|trend/.test(normalized);
+  const asksVisual = daily || isIncrementalEdit || series.length > 0 || /grafico|grafica|chart|visual|linea|barra|area|combina|mezcla|compara|evolucion|tendencia|trend/.test(normalized);
   if (!asksVisual) return buildDefaultSpec(context);
 
   if (previousChart && /agrega|anade|incluye|add/.test(normalized)) {
@@ -279,15 +280,26 @@ export function buildIntentSpec(intent: string, context: AnalyticsContext, initi
 
   const chartType = customChartType(intent);
   if (daily) {
-    const requestedLabel = series.map((item) => item.label).join(" · ");
-    return spec("AnalysisGrid", "Daily cash intelligence", `Reconfigured from “${intent.slice(0, 86)}${intent.length > 86 ? "…" : ""}”`, {
-      total: node("MetricCard", { label: "Cash collected", value: usd(analytics.cashflow.totalIn), delta: "+6.8%", tone: "positive", helper: "September total", span: "hero" }),
-      average: node("MetricCard", { label: "Average per day", value: usd(analytics.cashflow.averageDaily), delta: "+3.1%", tone: "positive", helper: "Across 30 days" }),
-      net: node("MetricCard", { label: "Net cash", value: usd(analytics.cashflow.net), delta: "+4.7%", tone: "positive", helper: "Cash in minus cash out" }),
-      chart: node(chartType, { title: "Money movement, day by day", description: requestedLabel, data: analytics.cashflow.daily, xKey: "day", series, format: "currency", span: "wide" }),
-      insight: node("InsightCard", { eyebrow: "Canvas insight", title: "Collection peaks cluster around billing dates", body: "The first and fifteenth carry stronger invoice collections. Every requested measure is rendered as its own series; count-based measures use the right axis.", stat: "2 peaks", span: "half", tone: "positive" }),
-      breakdown: node("BarChartCard", { title: "Cash-in composition", description: "Subscriptions and paid invoices", data: analytics.cashflow.daily.filter((_, index) => index % 5 === 0), xKey: "day", series: [{ key: "subscriptions", label: "Subscriptions", format: "currency" }, { key: "invoices", label: "Invoices", format: "currency" }], format: "currency", span: "half" }),
-    }, ["total", "average", "net", "chart", "insight", "breakdown"]);
+    const dailySeries = series.length ? series : [{ key: "cashIn", label: "Cash in", format: "currency" as const }];
+    const format = (value: number, seriesItem: CustomSeries) => seriesItem.format === "currency" ? usd(value) : formatValueForMetric(value, seriesItem.format);
+    const cards: Record<string, DashboardElement> = {};
+    if (dailySeries.length === 1) {
+      const item = dailySeries[0];
+      const values = analytics.cashflow.daily.map((row) => Number(row[item.key] ?? 0));
+      const total = values.reduce((sum, value) => sum + value, 0);
+      cards.total = node("MetricCard", { label: `${item.label} · total`, value: format(total, item), tone: "neutral", helper: "September 2026" });
+      cards.average = node("MetricCard", { label: `${item.label} · daily average`, value: format(total / values.length, item), tone: "neutral", helper: "30 days" });
+      cards.peak = node("MetricCard", { label: `${item.label} · peak day`, value: format(Math.max(...values), item), tone: "neutral", helper: analytics.cashflow.daily[values.indexOf(Math.max(...values))].day });
+    } else {
+      dailySeries.slice(0, 3).forEach((item, index) => {
+        const total = analytics.cashflow.daily.reduce((sum, row) => sum + Number(row[item.key] ?? 0), 0);
+        cards[`measure${index}`] = node("MetricCard", { label: item.label, value: format(total, item), tone: "neutral", helper: "September total", ...(dailySeries.length === 2 ? { span: "half" } : {}) });
+      });
+    }
+    return spec("AnalysisGrid", dailySeries.map((item) => item.label).join(" vs "), "September 2026 · Daily view", {
+      ...cards,
+      chart: node(chartType, { title: dailySeries.map((item) => item.label).join(" vs "), description: "Day by day · September 2026", data: analytics.cashflow.daily, xKey: "day", series: dailySeries, format: dailySeries[0].format, span: "wide" }),
+    }, [...Object.keys(cards), "chart"]);
   }
 
   if (!series.length && previousChart) series = (previousChart.props.series as CustomSeries[] | undefined) ?? [];
@@ -304,14 +316,25 @@ export function buildIntentSpec(intent: string, context: AnalyticsContext, initi
     ...analytics.accounting.monthly[index],
   }));
   const primary = series[0];
-  const latest = monthlyData.at(-1) as Record<string, string | number> | undefined;
-  return spec("AnalysisGrid", "Custom analytical canvas", `Reconfigured from “${intent.slice(0, 86)}${intent.length > 86 ? "…" : ""}”`, {
-    primary: node("MetricCard", { label: primary.label, value: primary.format === "currency" ? usd(Number(latest?.[primary.key] ?? 0)) : formatValueForMetric(Number(latest?.[primary.key] ?? 0), primary.format), delta: "+2.4%", tone: "positive", helper: "Latest period", span: "hero" }),
-    dimensions: node("MetricCard", { label: "Combined measures", value: String(series.length), delta: "Live", tone: "neutral", helper: "One line per measure" }),
-    grain: node("MetricCard", { label: "Time grain", value: "12 mo", delta: "Monthly", tone: "neutral", helper: "Comparable timeline" }),
-    chart: node(chartType, { title: series.map((item) => item.label).join(" vs "), description: "Combined on one canvas", data: monthlyData, xKey: "month", series, format: primary.format, span: "wide" }),
-    note: node("InsightCard", { eyebrow: "Flexible composition", title: "This view was assembled from your request", body: "Ask to add or remove a measure, switch to bars or area, change the time grain, or focus on a customer segment.", stat: `${series.length} series`, span: "wide", tone: "positive" }),
-  }, ["primary", "dimensions", "grain", "chart", "note"]);
+  const latest = monthlyData.at(-1) as Record<string, string | number>;
+  const previous = monthlyData.at(-2) as Record<string, string | number>;
+  const format = (value: number, seriesItem: CustomSeries) => seriesItem.format === "currency" ? usd(value) : formatValueForMetric(value, seriesItem.format);
+  const cards: Record<string, DashboardElement> = {};
+  if (series.length === 1) {
+    const currentValue = Number(latest[primary.key] ?? 0);
+    const previousValue = Number(previous[primary.key] ?? 0);
+    cards.current = node("MetricCard", { label: `${primary.label} · September`, value: format(currentValue, primary), tone: "neutral", helper: "Latest month" });
+    cards.previous = node("MetricCard", { label: `${primary.label} · August`, value: format(previousValue, primary), tone: "neutral", helper: "Previous month" });
+    cards.change = node("MetricCard", { label: `${primary.label} · change`, value: previousValue ? `${(((currentValue - previousValue) / previousValue) * 100).toFixed(1)}%` : "—", tone: currentValue >= previousValue ? "positive" : "negative", helper: "September vs August" });
+  } else {
+    series.slice(0, 3).forEach((item, index) => {
+      cards[`measure${index}`] = node("MetricCard", { label: item.label, value: format(Number(latest[item.key] ?? 0), item), tone: "neutral", helper: "September 2026", ...(series.length === 2 ? { span: "half" } : {}) });
+    });
+  }
+  return spec("AnalysisGrid", series.map((item) => item.label).join(" vs "), "September 2026 · Monthly view", {
+    ...cards,
+    chart: node(chartType, { title: series.map((item) => item.label).join(" vs "), description: "Monthly evolution of the requested measures", data: monthlyData, xKey: "month", series, format: primary.format, span: "wide" }),
+  }, [...Object.keys(cards), "chart"]);
 }
 
 function formatValueForMetric(value: number, format: CustomSeries["format"]) {

@@ -11,7 +11,7 @@ import { useDashboardStore } from "@/store/dashboard-store";
 const viewGroups = [
   { label: "Financial statements", description: "Performance, margins and cash", items: ["Muéstrame el estado de resultados", "Compara ingresos, gastos y utilidad neta", "Evolución del saldo de caja"] },
   { label: "Working capital", description: "What is owed and what is due", items: ["Quiero ver cuentas por cobrar", "Compara cuentas por cobrar y cuentas por pagar", "Muéstrame las facturas vencidas"] },
-  { label: "Operating intelligence", description: "Movement, drivers and signals", items: ["Quiero ver la entrada de dinero día a día", "Desglosa gastos por categoría", "Combina ingresos, clientes y churn en líneas"] },
+  { label: "Operating intelligence", description: "Movement, drivers and signals", items: ["Muéstrame los 10 clientes que más han facturado este mes", "Quiero ver la entrada de dinero día a día", "Desglosa gastos por categoría", "Combina ingresos, clientes y churn en líneas"] },
 ];
 
 function Wordmark() {

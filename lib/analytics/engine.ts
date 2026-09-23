@@ -44,6 +44,13 @@ export function calculateAnalytics(customers = generateDataset()): AnalyticsSnap
   const canceled = customers.filter((customer) => customer.status === "canceled").length;
   const newThisMonth = customers.filter((customer) => customer.joinedMonth === 11).length;
   const acme = customers.find((customer) => customer.id === "acme")!;
+  const rankedBillingPool = new Map(
+    [10, 11].flatMap((month) => {
+      const ordered = [...customers].sort((a, b) => b.mrrHistory[month] - a.mrrHistory[month]);
+      return [...ordered.slice(0, 50), ...ordered.slice(-50)];
+    })
+      .map((customer) => [customer.id, customer] as const),
+  );
   const peers = enterprise
     .filter((customer) => customer.id !== "acme" && customer.status !== "canceled")
     .sort((a, b) => Math.abs(a.mrrHistory[10] - acme.mrrHistory[10]) - Math.abs(b.mrrHistory[10] - acme.mrrHistory[10]))
@@ -171,9 +178,8 @@ export function calculateAnalytics(customers = generateDataset()): AnalyticsSnap
         .slice(0, 8)
         .map((customer) => ({ id: customer.id, customer: customer.name, segment: customer.segment, mrr: customer.mrrHistory[11], status: customer.status })),
       decliners: decliners.slice(0, 10),
-      billingProfiles: [...customers]
+      billingProfiles: [...rankedBillingPool.values()]
         .sort((a, b) => b.mrrHistory[11] - a.mrrHistory[11])
-        .slice(0, 14)
         .map((customer) => ({
           id: customer.id,
           name: customer.name,

@@ -32,12 +32,12 @@ function CardFrame({ title, description, span, children, className }: BaseCardPr
   );
 }
 
-export function Layout({ props, children, variant }: { props: { title: string; subtitle: string }; children?: ReactNode; variant: string }) {
+export function Layout({ props, children, variant }: { props: { title: string; subtitle: string; periodLabel?: string }; children?: ReactNode; variant: string }) {
   return (
     <div className="canvas-document">
       <div className="canvas-title-row">
         <div><p className="canvas-kicker">{props.subtitle}</p><h1>{props.title}</h1></div>
-        <div className="period-control"><span>Sep 1</span><span className="period-dash">—</span><span>Sep 30</span></div>
+        <div className="period-control">{props.periodLabel ? <span>{props.periodLabel}</span> : <><span>Sep 1</span><span className="period-dash">—</span><span>Sep 30</span></>}</div>
       </div>
       <div className={cn("dashboard-grid", `layout-${variant}`)}>{children}</div>
     </div>
@@ -175,6 +175,18 @@ export function DataTable({ props }: { props: BaseCardProps & { data: Record<str
       <div className="table-scroll"><table><thead><tr>{props.columns.map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{props.data.map((row, index) => <tr key={String(row.id ?? row.customer ?? index)} className={props.rowAction ? "clickable-row" : undefined} onClick={props.rowAction && String(row.id ?? "").includes("acme") ? () => openCustomer("acme") : undefined}>{props.columns.map((column) => <td key={column.key}>{formatValue(row[column.key] as string | number, column.format)}{column.key === "customer" && String(row.id ?? "").includes("acme") ? <ChevronRight size={13} /> : null}</td>)}</tr>)}</tbody></table></div>
     </CardFrame>
   );
+}
+
+export function CustomerRanking({ props }: { props: BaseCardProps & { data: { rank: number; id: string; name: string; segment: string; value: number }[] } }) {
+  const maximum = Math.max(...props.data.map((row) => row.value), 1);
+  return <CardFrame {...props} className="customer-ranking-card">
+    <div className="customer-ranking-head"><span>Cliente</span><span>Facturación mensual</span></div>
+    <ol className="customer-ranking-list">{props.data.map((row) => <li key={row.id}>
+      <span className="customer-ranking-position">{String(row.rank).padStart(2, "0")}</span>
+      <span className="customer-ranking-identity"><strong>{row.name}</strong><small>{row.segment} · {row.id}</small></span>
+      <span className="customer-ranking-measure"><strong>{formatValue(row.value, "currency")}</strong><span className="customer-ranking-track"><span style={{ width: `${(row.value / maximum) * 100}%` }} /></span></span>
+    </li>)}</ol>
+  </CardFrame>;
 }
 
 function Sparkline({ values, positive }: { values: number[]; positive: boolean }) {

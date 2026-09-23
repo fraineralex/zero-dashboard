@@ -65,17 +65,18 @@ export async function POST(request: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       const send = (value: unknown) => controller.enqueue(encoder.encode(ndjson(value)));
-      if (!apiKey) {
+      const focusedRanking = memoryRecipe?.id === "customer-billing-ranking";
+      if (focusedRanking || !apiKey) {
         // Explicit development path: all analysis and data are deterministic.
         // Production never silently claims an AI-selected composition here.
         send({
           type: "step",
           spec: fallback,
           diagnostics: {
-            mode: "development-fallback",
+            mode: focusedRanking ? "deterministic" : "development-fallback",
             candidateCount: resolved.candidates.length,
             resolverMs: resolved.resolverMs,
-            stopReason: "no-ai-gateway-key",
+            stopReason: focusedRanking ? "focused-ranking-recipe" : "no-ai-gateway-key",
             uiMemory: deterministicCapabilityDecision(memoryRecipe),
           },
         });

@@ -11,6 +11,7 @@ import {
   ComparisonChart,
   ComparisonSummary,
   ContributionCard,
+  CustomerRanking,
   CustomerHeader,
   DataTable,
   EntityTrendTable,
@@ -44,6 +45,7 @@ const { registry } = defineRegistry(dashboardCatalog, {
     ComparisonChart: ({ props }) => <ComparisonChart props={props} />,
     DataTable: ({ props }) => <DataTable props={props} />,
     EntityTrendTable: ({ props }) => <EntityTrendTable props={props} />,
+    CustomerRanking: ({ props }) => <CustomerRanking props={props} />,
     SegmentTable: ({ props }) => <SegmentTable props={props} />,
     InsightCard: ({ props }) => <InsightCard props={props} />,
     FindingCard: ({ props }) => <FindingCard props={props} />,
@@ -66,7 +68,7 @@ export function DashboardRenderer({ spec, loading }: { spec: DashboardSpec; load
   }
   return (
     <JSONUIProvider registry={registry} initialState={spec.state ?? {}}>
-      <Layout props={root.props as { title: string; subtitle: string }} variant={variant}>
+      <Layout props={root.props as { title: string; subtitle: string; periodLabel?: string }} variant={variant}>
         {root.children?.map((id) => {
           const element = spec.elements[id];
           if (!element) return null;
