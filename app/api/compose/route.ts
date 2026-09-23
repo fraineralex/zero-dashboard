@@ -61,9 +61,9 @@ export async function POST(request: Request) {
   const resolved = resolveCandidates(context, payload.intent);
   const fallback = buildIntentSpec(payload.intent, context, payload.initialSpec);
   const memoryRecipe = findUiRecipe(payload.intent);
-  // Vercel supplies a short-lived OIDC token to deployed functions. The AI SDK
-  // uses it automatically for Luna; Jev's direct evaluator needs it explicitly.
-  const apiKey = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
+  // Vercel injects runtime OIDC into the function Request, not process.env.
+  // The Gateway validates this signed token; never forward it to the browser.
+  const apiKey = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN || request.headers.get("x-vercel-oidc-token");
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
