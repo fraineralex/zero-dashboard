@@ -11,6 +11,7 @@ const cases = [
   ["Facturas por pagar", "vendorBills", "supplier"],
   ["Últimas facturas de clientes", "customerInvoices", "customer"],
   ["Cuentas por cobrar", "customerInvoices", "customer"],
+  ["Últimos 10 asientos contables", "journalEntries", "account"],
   ["Productos con inventario bajo", "stock", "product"],
   ["Muéstrame la nómina de empleados", "payroll", "employee"],
   ["Últimos registros de asistencia", "attendance", "employee"],
@@ -65,5 +66,10 @@ describe("ERP request fidelity", () => {
     const pastMonth = "Órdenes de compra a proveedores de agosto";
     expect(requestFidelityIssue(tooMany, buildErpSpec(tooMany)!)).toContain("20 registros");
     expect(requestFidelityIssue(pastMonth, buildErpSpec(pastMonth)!)).toContain("septiembre de 2026");
+  });
+
+  it("does not present an incomplete sample as a formal financial statement", () => {
+    const sample = buildErpSpec("Últimos 10 asientos contables")!;
+    expect(requestFidelityIssue("Muéstrame el estado de resultados", sample)).toContain("cierre contable completo");
   });
 });

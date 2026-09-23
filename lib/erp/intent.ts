@@ -8,11 +8,12 @@ const columns: Record<ErpCollection, Column[]> = {
   salesOrders: [{ key: "id", label: "Orden" }, { key: "date", label: "Fecha" }, { key: "customer", label: "Cliente" }, { key: "items", label: "Ítems" }, { key: "amount", label: "Total", format: "dop" }, { key: "status", label: "Estado" }],
   vendorBills: [{ key: "id", label: "Factura" }, { key: "supplier", label: "Proveedor" }, { key: "date", label: "Emisión" }, { key: "due", label: "Vencimiento" }, { key: "amount", label: "Importe", format: "dop" }, { key: "status", label: "Estado" }],
   customerInvoices: [{ key: "id", label: "Factura" }, { key: "customer", label: "Cliente" }, { key: "date", label: "Emisión" }, { key: "due", label: "Vencimiento" }, { key: "amount", label: "Importe", format: "dop" }, { key: "status", label: "Estado" }],
+  journalEntries: [{ key: "id", label: "Asiento" }, { key: "date", label: "Fecha" }, { key: "reference", label: "Referencia" }, { key: "account", label: "Cuenta" }, { key: "debit", label: "Débito", format: "dop" }, { key: "credit", label: "Crédito", format: "dop" }],
   stock: [{ key: "id", label: "SKU" }, { key: "product", label: "Producto" }, { key: "warehouse", label: "Almacén" }, { key: "available", label: "Disponible" }, { key: "minimum", label: "Mínimo" }, { key: "status", label: "Estado" }],
   payroll: [{ key: "id", label: "Empleado" }, { key: "employee", label: "Nombre" }, { key: "department", label: "Departamento" }, { key: "gross", label: "Bruto", format: "dop" }, { key: "deductions", label: "Descuentos", format: "dop" }, { key: "net", label: "Neto", format: "dop" }],
   attendance: [{ key: "date", label: "Fecha" }, { key: "employee", label: "Empleado" }, { key: "department", label: "Departamento" }, { key: "checkIn", label: "Entrada" }, { key: "checkOut", label: "Salida" }, { key: "status", label: "Estado" }],
 };
-const labels: Record<ErpCollection, string> = { purchaseOrders: "órdenes de compra a proveedores", salesOrders: "órdenes de venta", vendorBills: "facturas de proveedores", customerInvoices: "facturas de clientes", stock: "productos en inventario", payroll: "registros de nómina", attendance: "registros de asistencia" };
+const labels: Record<ErpCollection, string> = { purchaseOrders: "órdenes de compra a proveedores", salesOrders: "órdenes de venta", vendorBills: "facturas de proveedores", customerInvoices: "facturas de clientes", journalEntries: "asientos contables", stock: "productos en inventario", payroll: "registros de nómina", attendance: "registros de asistencia" };
 
 export function parseErpIntent(intent: string): { collection: ErpCollection; count: number; mode: "latest" | "largest" | "low" | "all" } | null {
   const text = clean(intent);
@@ -21,6 +22,7 @@ export function parseErpIntent(intent: string): { collection: ErpCollection; cou
   if (/nomina|salarios?|payroll|sueldos?|empleados?.*(?:pago|neto|bruto)/.test(text)) collection = "payroll";
   else if (/asistencia|marcaciones?|ponches?|tardanzas?|attendance/.test(text)) collection = "attendance";
   else if (/inventario|existencias?|stock|almacen|productos?.*(?:disponib|reponer)/.test(text)) collection = "stock";
+  else if (/asientos? contables?|libro diario|movimientos? contables?|journal entries|general ledger/.test(text)) collection = "journalEntries";
   else if (/\b(?:facturas?|invoices?)\b|cuentas? por (?:cobrar|pagar)/.test(text) && !/\b(?:clientes?|usuarios?)\b.*\b(?:pagaron|facturaron|facturado)\b/.test(text)) collection = purchasing || /pagar/.test(text) ? "vendorBills" : "customerInvoices";
   else if (/(?:ordenes?|pedidos?|cotizaciones?)\s+(?:de\s+)?compras?|compras?.*(?:orden|pedido)|ordenes?.*proveedor|proveedor.*orden/.test(text)) collection = "purchaseOrders";
   else if (/(?:ordenes?|pedidos?)\s+(?:de\s+)?ventas?|ventas?.*(?:orden|pedido)/.test(text)) collection = "salesOrders";

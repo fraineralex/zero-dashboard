@@ -11,7 +11,7 @@ import { useDashboardStore } from "@/store/dashboard-store";
 const viewGroups = [
   { label: "Compras y ventas", description: "Pedidos, proveedores, clientes y facturas", items: ["Últimas 10 órdenes de compra a proveedores", "Últimas 10 órdenes de venta", "Compara compras y ventas", "Compras por proveedor", "Últimas facturas de proveedores", "Últimas facturas de clientes"] },
   { label: "Operaciones y personas", description: "Existencias, nómina y asistencia", items: ["Productos con inventario bajo", "Muéstrame la nómina de empleados", "Últimos registros de asistencia"] },
-  { label: "Financial statements", description: "Performance, margins and cash", items: ["Muéstrame el estado de resultados", "Compara ingresos, gastos y utilidad neta", "Evolución del saldo de caja"] },
+  { label: "Contabilidad", description: "Libro diario y obligaciones", items: ["Últimos 10 asientos contables", "Facturas por cobrar", "Facturas por pagar"] },
   { label: "Working capital", description: "What is owed and what is due", items: ["Quiero ver cuentas por cobrar", "Compara cuentas por cobrar y cuentas por pagar", "Muéstrame las facturas vencidas"] },
   { label: "Operating intelligence", description: "Movement, drivers and signals", items: ["Muéstrame los 10 clientes que más han facturado este mes", "Quiero ver la entrada de dinero día a día", "Desglosa gastos por categoría", "Combina ingresos, clientes y churn en líneas"] },
 ];

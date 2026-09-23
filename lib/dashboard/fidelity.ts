@@ -7,6 +7,7 @@ const rows = (element: DashboardElement | undefined) => Array.isArray(element?.p
 
 export function requestFidelityIssue(intent: string, spec: DashboardSpec): string | null {
   const value = normalize(intent);
+  if (/estado de resultados|balance general|balance de comprobacion|utilidad neta|flujo de efectivo/.test(value)) return "La muestra ERP no contiene un cierre contable completo; no sería correcto presentar un estado financiero formal.";
   const erp = parseErpIntent(intent);
   if (!erp && ["salesAndPurchases", "purchasesBySupplier"].includes((spec.state?.erp as { collection?: string } | undefined)?.collection ?? "")) return null;
   if (erp) {
@@ -18,6 +19,7 @@ export function requestFidelityIssue(intent: string, spec: DashboardSpec): strin
     if (metadata?.collection !== erp.collection || !table) return "La respuesta no corresponde al módulo ERP solicitado.";
     if (records.length !== (erp.mode === "low" ? records.length : erp.count)) return `Se solicitaron ${erp.count} registros y la vista muestra otra cantidad.`;
     if (erp.collection === "purchaseOrders" && records.some((row) => !row.supplier || !row.id || !row.date || typeof row.amount !== "number")) return "Faltan proveedor, orden, fecha o importe de compra.";
+    if (erp.collection === "journalEntries" && records.some((row) => !row.account || !row.reference || typeof row.debit !== "number" || typeof row.credit !== "number")) return "Faltan cuenta, referencia, débito o crédito en el libro diario.";
     return null;
   }
   if (/\b(proveedor(?:es)?|vendor(?:s)?|nomina|payroll|salario(?:s)?|salary|salaries)\b/.test(value)) return "La solicitud requiere un detalle de ERP aún no disponible en los datos demo.";
