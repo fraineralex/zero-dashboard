@@ -59,8 +59,12 @@ export async function composeWithLuna(intent: string, candidates: Experimental_C
     elements[id] = structuredClone(candidate.element) as DashboardElement;
   }
   const composed: DashboardSpec = { root: "root", state: fallback.state ?? {}, elements };
-  if (validateCanvasDesign(composed) || !dashboardCatalog.validate(composed).success) {
-    throw new Error("Generated composition does not satisfy the dashboard design contract.");
+  const designIssue = validateCanvasDesign(composed);
+  if (designIssue) throw new Error(`Generated composition failed design validation: ${designIssue}`);
+  const catalogValidation = dashboardCatalog.validate(composed);
+  if (!catalogValidation.success) {
+    const issue = catalogValidation.error?.issues[0];
+    throw new Error(`Generated composition failed catalog validation: ${issue?.path.join(".") ?? "unknown"} (${issue?.code ?? "unknown"})`);
   }
   return composed;
 }
