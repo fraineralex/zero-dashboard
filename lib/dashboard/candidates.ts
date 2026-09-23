@@ -19,6 +19,7 @@ const descriptions: Record<string, string> = {
   DataTable: "Prepared ranked records with fixed columns and approved actions.",
   EntityTrendTable: "UI Memory recipe for identifiable customers with current billing, individual twelve-month trends, search, sorting, and multi-customer comparison.",
   CustomerRanking: "Prepared customer ranking; every row and summary uses the same requested month and cohort.",
+  BillingLedger: "Prepared recent billing events for identifiable customers; sorted by issue date with exact amounts and a requested limit.",
   SegmentTable: "Prepared segment performance and deterministic drill-down.",
   InsightCard: "Prepared analytical conclusion already derived by the local engine.",
   FindingCard: "Prepared primary finding for the requested investigation.",

@@ -7,6 +7,7 @@ import { dashboardCatalog } from "@/lib/dashboard/catalog";
 import {
   AreaChartCard,
   BarChartCard,
+  BillingLedger,
   CohortCard,
   ComparisonChart,
   ComparisonSummary,
@@ -48,6 +49,7 @@ const { registry } = defineRegistry(dashboardCatalog, {
     DataTable: ({ props }) => <DataTable props={props} />,
     EntityTrendTable: ({ props }) => <EntityTrendTable props={props} />,
     CustomerRanking: ({ props }) => <CustomerRanking props={props} />,
+    BillingLedger: ({ props }) => <BillingLedger props={props} />,
     SegmentTable: ({ props }) => <SegmentTable props={props} />,
     InsightCard: ({ props }) => <InsightCard props={props} />,
     FindingCard: ({ props }) => <FindingCard props={props} />,

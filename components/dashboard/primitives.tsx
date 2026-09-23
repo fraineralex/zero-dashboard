@@ -12,6 +12,7 @@ type BaseCardProps = { title: string; description?: string; span?: string };
 type Series = { key: string; label: string; format?: "currency" | "percent" | "number"; axis?: "left" | "right" };
 type ChartRow = Record<string, string | number | boolean | null>;
 type BillingProfile = { id: string; name: string; segment: string; status: string; current: number; previous: number; change: number; annualized: number; history: { month: string; value: number }[] };
+const exactUsd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 
 const spanClass = (span?: string) => span ? `span-${span}` : undefined;
 
@@ -233,6 +234,29 @@ export function CustomerRanking({ props }: { props: BaseCardProps & { data: { ra
   </CardFrame>;
 }
 
+export function BillingLedger({ props }: { props: BaseCardProps & { data: { id: string; name: string; segment: string; billedAt: string; billedOn: string; amount: number }[] } }) {
+  const total = props.data.reduce((sum, row) => sum + row.amount, 0);
+  const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  return <CardFrame {...props} className="customer-ranking-card billing-ledger-card">
+    <div className="customer-ranking-meta"><span>{props.data.length} clientes identificados · más reciente primero</span><span>USD · registros simulados</span></div>
+    <Table className="customer-ranking-table billing-ledger-table">
+      <TableHeader><TableRow>
+        <TableHead className="ranking-index">#</TableHead>
+        <TableHead>Cliente</TableHead>
+        <TableHead className="ledger-date">Fecha de emisión</TableHead>
+        <TableHead className="ranking-amount"><span className="ledger-full-label">Importe facturado</span><span className="ledger-short-label">Importe</span></TableHead>
+      </TableRow></TableHeader>
+      <TableBody>{props.data.map((row, index) => <TableRow key={`${row.id}-${row.billedAt}`}>
+        <TableCell className="ranking-index"><span className="ranking-position">{String(index + 1).padStart(2, "0")}</span></TableCell>
+        <TableCell><div className="ranking-identity"><strong title={row.name}>{row.name}</strong><span>{row.segment} · {row.id}</span><time className="ledger-mobile-date" dateTime={row.billedAt}>{row.billedOn}</time></div></TableCell>
+        <TableCell className="ledger-date"><time dateTime={row.billedAt}>{row.billedOn}</time></TableCell>
+        <TableCell className="ranking-amount">{currency.format(row.amount)}</TableCell>
+      </TableRow>)}</TableBody>
+      <TableFooter><TableRow><TableCell colSpan={3}>Total de los {props.data.length} registros mostrados</TableCell><TableCell className="ranking-amount">{currency.format(total)}</TableCell></TableRow></TableFooter>
+    </Table>
+  </CardFrame>;
+}
+
 function Sparkline({ values, positive }: { values: number[]; positive: boolean }) {
   const width = 104;
   const height = 30;
@@ -257,7 +281,7 @@ export function EntityTrendTable({ props }: { props: BaseCardProps & { data: Bil
   return <CardFrame {...props} className="entity-trend-card">
     <div className="entity-explorer-toolbar"><label><Search size={14} /><span className="sr-only">Search customers</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search customer, segment or status…" /></label><div><span>{rows.length} identified</span><button onClick={() => setSort((current) => current === "current" ? "change" : "current")}><ArrowUpDown size={13} />Sort by {sort === "current" ? "billing" : "change"}</button></div></div>
     {selectedProfiles.length ? <div className="comparison-tray"><div className="comparison-tray-heading"><div><span>Live comparison</span><strong>{selectedProfiles.length === 1 ? "Select another customer" : `${selectedProfiles.length} billing trajectories`}</strong></div><div>{selectedProfiles.map((profile) => <button key={profile.id} onClick={() => toggle(profile.id)}>{profile.name}<X size={11} /></button>)}</div></div>{selectedProfiles.length > 1 ? <ChartContainer config={compareConfig} className="comparison-mini-chart" aria-label="Selected customer billing comparison"><LineChart data={compareData} margin={{ top: 10, right: 8, bottom: 0, left: 0 }}><CartesianGrid vertical={false} stroke="var(--grid-line)" /><XAxis dataKey="month" tickLine={false} axisLine={false} interval="preserveStartEnd" /><YAxis tickLine={false} axisLine={false} width={50} tickFormatter={(value) => formatValue(value, "currency")} /><ChartTooltip content={<ChartTooltipContent formatter={(value) => formatValue(value, "currency")} />} />{selectedProfiles.map((profile) => <Line key={profile.id} name={profile.name} dataKey={profile.id} type="monotone" stroke={`var(--color-${profile.id})`} strokeWidth={2} dot={false} isAnimationActive={false} />)}<ChartLegend verticalAlign="top" height={24} /></LineChart></ChartContainer> : <p className="comparison-hint">Select up to four customers to compare them without leaving this view.</p>}</div> : null}
-    <div className="entity-trend-scroll"><table className="entity-trend-table"><thead><tr><th aria-label="Compare" /><th>Customer</th><th>Monthly billing</th><th>Change</th><th>12-month trend</th><th>Status</th></tr></thead><tbody>{rows.map((profile) => { const active = selected.includes(profile.id); return <tr key={profile.id} className={active ? "selected" : undefined}><td><button className="entity-select" aria-label={`${active ? "Remove" : "Add"} ${profile.name} ${active ? "from" : "to"} comparison`} aria-pressed={active} onClick={() => toggle(profile.id)}>{active ? <Check size={12} /> : null}</button></td><td><div className="entity-identity"><span>{profile.name.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span><div><strong>{profile.name}</strong><em>{profile.segment} · {profile.id}</em></div></div></td><td><strong>{formatValue(profile.current, "currency")}</strong><small>{formatValue(profile.annualized, "currency")} annualized</small></td><td><span className={profile.change >= 0 ? "positive" : "negative"}>{profile.change >= 0 ? "+" : ""}{profile.change.toFixed(1)}%</span><small>vs previous month</small></td><td><Sparkline values={profile.history.map((point) => point.value)} positive={profile.change >= 0} /></td><td><span className={cn("entity-status", `status-${profile.status}`)}>{profile.status.replace("_", " ")}</span></td></tr>; })}</tbody></table></div>
+    <div className="entity-trend-scroll"><table className="entity-trend-table"><thead><tr><th aria-label="Compare" /><th>Customer</th><th>Monthly billing</th><th>Change</th><th>12-month trend</th><th>Status</th></tr></thead><tbody>{rows.map((profile) => { const active = selected.includes(profile.id); return <tr key={profile.id} className={active ? "selected" : undefined}><td><button className="entity-select" aria-label={`${active ? "Remove" : "Add"} ${profile.name} ${active ? "from" : "to"} comparison`} aria-pressed={active} onClick={() => toggle(profile.id)}>{active ? <Check size={12} /> : null}</button></td><td><div className="entity-identity"><span>{profile.name.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span><div><strong>{profile.name}</strong><em>{profile.segment} · {profile.id}</em></div></div></td><td><strong>{exactUsd.format(profile.current)}</strong><small>{exactUsd.format(profile.annualized)} annualized</small></td><td><span className={profile.change >= 0 ? "positive" : "negative"}>{profile.change >= 0 ? "+" : ""}{profile.change.toFixed(1)}%</span><small>vs previous month</small></td><td><Sparkline values={profile.history.map((point) => point.value)} positive={profile.change >= 0} /></td><td><span className={cn("entity-status", `status-${profile.status}`)}>{profile.status.replace("_", " ")}</span></td></tr>; })}</tbody></table></div>
   </CardFrame>;
 }
 

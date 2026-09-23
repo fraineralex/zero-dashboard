@@ -37,7 +37,7 @@ export async function composeWithLuna(intent: string, candidates: Experimental_C
   const selected = [...new Set(plan.blocks)];
   const primaryTypes = new Set([
     "LineChartCard", "AreaChartCard", "BarChartCard", "PieChartCard", "ComparisonChart",
-    "DataTable", "EntityTrendTable", "CustomerRanking", "SegmentTable", "FunnelCard", "CohortCard",
+    "DataTable", "EntityTrendTable", "CustomerRanking", "BillingLedger", "SegmentTable", "FunnelCard", "CohortCard",
   ]);
   const requestedEvidence = Object.entries(fallback.elements)
     .filter(([id, element]) => id !== fallback.root && primaryTypes.has(element.type))

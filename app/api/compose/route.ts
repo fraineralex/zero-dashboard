@@ -4,6 +4,7 @@ import { experimental_composeSpec, experimental_createEvaluator, type Spec } fro
 import { z } from "zod";
 import { dashboardCatalog } from "@/lib/dashboard/catalog";
 import { CANVAS_DESIGN_GUIDELINES, validateCanvasDesign } from "@/lib/dashboard/design-system";
+import { requestFidelityIssue, unavailableSpec } from "@/lib/dashboard/fidelity";
 import { composeWithLuna } from "@/lib/dashboard/luna-composer";
 import { resolveCandidates } from "@/lib/dashboard/candidates";
 import { buildIntentSpec } from "@/lib/dashboard/specs";
@@ -71,7 +72,9 @@ export async function POST(request: Request) {
 
   const context = payload.context as AnalyticsContext;
   const resolved = resolveCandidates(context, payload.intent);
-  const fallback = buildIntentSpec(payload.intent, context, payload.initialSpec);
+  const prepared = buildIntentSpec(payload.intent, context, payload.initialSpec);
+  const fidelityIssue = payload.source === "navigation" ? null : requestFidelityIssue(payload.intent, prepared);
+  const fallback = fidelityIssue ? unavailableSpec(fidelityIssue) : prepared;
   const memoryRecipe = findUiRecipe(payload.intent);
   // Vercel injects runtime OIDC into the function Request, not process.env.
   // The Gateway validates this signed token; never forward it to the browser.
@@ -81,19 +84,19 @@ export async function POST(request: Request) {
   const stream = new ReadableStream({
     async start(controller) {
       const send = (value: unknown) => controller.enqueue(encoder.encode(ndjson(value)));
-      const focusedRanking = memoryRecipe?.id === "customer-billing-ranking";
+      const focusedBilling = memoryRecipe?.id === "customer-billing-ranking" || memoryRecipe?.id === "recent-customer-billing";
       const explicitPie = Object.values(fallback.elements).some((element) => element.type === "PieChartCard");
-      if (focusedRanking || explicitPie || !apiKey) {
+      if (fidelityIssue || focusedBilling || explicitPie || !apiKey) {
         // Explicit development path: all analysis and data are deterministic.
         // Production never silently claims an AI-selected composition here.
         send({
           type: "step",
           spec: fallback,
           diagnostics: {
-            mode: focusedRanking || explicitPie ? "deterministic" : "development-fallback",
+            mode: fidelityIssue || focusedBilling || explicitPie ? "deterministic" : "development-fallback",
             candidateCount: resolved.candidates.length,
             resolverMs: resolved.resolverMs,
-            stopReason: focusedRanking ? "focused-ranking-recipe" : explicitPie ? "explicit-pie-request" : "no-ai-gateway-credentials",
+            stopReason: fidelityIssue ? "request-not-answerable" : focusedBilling ? "focused-billing-recipe" : explicitPie ? "explicit-pie-request" : "no-ai-gateway-credentials",
             uiMemory: deterministicCapabilityDecision(memoryRecipe),
           },
         });
@@ -118,6 +121,8 @@ export async function POST(request: Request) {
         }
         try {
           const generated = await composeWithLuna(payload.intent, resolved.candidates, fallback, AbortSignal.timeout(10_000));
+          const issue = requestFidelityIssue(payload.intent, generated);
+          if (issue) throw new Error(`Generated composition failed request fidelity: ${issue}`);
           send({ type: "step", spec: generated, diagnostics: { mode: "luna", candidateCount: resolved.candidates.length, resolverMs: resolved.resolverMs, uiMemory } });
           send({ type: "complete", spec: generated, diagnostics: { mode: "luna", stopReason: "validated-luna-composition", uiMemory } });
           return;
@@ -145,8 +150,9 @@ export async function POST(request: Request) {
           },
         })) {
           const designIssue = validateCanvasDesign(event.spec as DashboardSpec);
-          if (designIssue) {
-            send({ type: event.type, spec: fallback, diagnostics: { mode: "deterministic", candidateCount: resolved.candidates.length, resolverMs: resolved.resolverMs, stopReason: `design-guardrail:${designIssue}`, uiMemory } });
+          const answerIssue = requestFidelityIssue(payload.intent, event.spec as DashboardSpec);
+          if (designIssue || answerIssue) {
+            send({ type: event.type, spec: fallback, diagnostics: { mode: "deterministic", candidateCount: resolved.candidates.length, resolverMs: resolved.resolverMs, stopReason: designIssue ? `design-guardrail:${designIssue}` : "request-fidelity-guardrail", uiMemory } });
             continue;
           }
           if (event.type === "step") {

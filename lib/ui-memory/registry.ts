@@ -1,4 +1,5 @@
 import { analytics } from "@/lib/analytics/engine";
+import { BILLING_DEMO_AS_OF, billingLedgerForMonth } from "@/lib/analytics/billing-ledger";
 import type { DashboardElement, DashboardSpec } from "@/types/analytics";
 
 export type UiRecipeManifest = {
@@ -12,6 +13,18 @@ export type UiRecipeManifest = {
 };
 
 export const UI_MEMORY_RECIPES: UiRecipeManifest[] = [
+  {
+    id: "recent-customer-billing",
+    version: 1,
+    name: "Recent Customer Billing",
+    origin: "curated",
+    capabilities: ["recent-billing-events", "customer-identification", "requested-row-limit", "exact-amounts", "date-order"],
+    intentExamples: [
+      "Muéstrame los 10 últimos usuarios que facturaron donde vea sus nombres y monto",
+      "Show the last 5 customers billed with names and amounts",
+    ],
+    requiredData: ["billing-event.date", "customer.id", "customer.name", "billing-event.amount"],
+  },
   {
     id: "customer-billing-ranking",
     version: 1,
@@ -41,6 +54,21 @@ export const UI_MEMORY_RECIPES: UiRecipeManifest[] = [
 
 const normalize = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
+export function parseRecentCustomerBilling(intent: string) {
+  const value = normalize(intent);
+  const people = /\b(clientes?|usuarios?|customers?|users?|accounts?)\b/.test(value);
+  const billing = /factur|billing|billed|invoice|invoic/.test(value);
+  const recent = /\b(?:ultimos?|latest|last|recent(?:es)?)\s+(?:\d{1,2}\s+)?(?:clientes?|usuarios?|customers?|users?|accounts?)\b/.test(value)
+    || /\b\d{1,2}\s+ultimos?\s+(?:clientes?|usuarios?|customers?|users?|accounts?)\b/.test(value)
+    || /\b(?:clientes?|usuarios?|customers?|users?|accounts?)\s+(?:que\s+)?(?:facturaron\s+)?(?:mas\s+)?recientes\b/.test(value);
+  if (!people || !billing || !recent) return null;
+  const countMatch = value.match(/\b(\d{1,2})\s+(?:ultimos?\s+)?(?:clientes?|usuarios?|customers?|users?|accounts?)\b/)
+    ?? value.match(/\b(?:ultimos?|latest|last)\s+(\d{1,2})\b/);
+  const count = Math.min(50, Math.max(1, Number(countMatch?.[1] ?? 10)));
+  const monthIndex = /mes pasado|mes anterior|last month|previous month/.test(value) ? 10 : 11;
+  return { count, monthIndex } as const;
+}
+
 export function parseCustomerBillingRanking(intent: string) {
   const value = normalize(intent);
   const asksForCustomers = /\b(cliente|clientes|usuario|usuarios|customer|customers|account|accounts)\b/.test(value);
@@ -56,22 +84,23 @@ export function parseCustomerBillingRanking(intent: string) {
 }
 
 export function findUiRecipe(intent: string) {
-  if (parseCustomerBillingRanking(intent)) return UI_MEMORY_RECIPES[0];
+  if (parseRecentCustomerBilling(intent)) return UI_MEMORY_RECIPES[0];
+  if (parseCustomerBillingRanking(intent)) return UI_MEMORY_RECIPES[1];
   const value = normalize(intent);
   const asksForPeople = /usuario|cliente|customer|account|cuenta/.test(value);
   const asksForBilling = /factura|facturacion|billing|revenue|ingreso|mrr/.test(value);
-  const asksForTrend = /tendencia|trend|evolucion|historial|history|comportamiento/.test(value);
-  const asksForIdentity = /nombre|identific|quien|who|usuario|cliente/.test(value);
-  return asksForPeople && asksForBilling && asksForTrend && asksForIdentity ? UI_MEMORY_RECIPES[1] : null;
+  const asksForIndividualBilling = /nombre|identific|quien|who|por cliente|por usuario|sus factur|their bill|individual|(?:clientes?|usuarios?) (?:con|y) (?:sus )?factur/.test(value);
+  const asksForBillingHistory = /tendencia|trend|evolucion|historial|history|comportamiento/.test(value) && /factur|billing/.test(value);
+  return asksForPeople && asksForBilling && (asksForIndividualBilling || asksForBillingHistory) ? UI_MEMORY_RECIPES[2] : null;
 }
 
-const node = (type: string, props: Record<string, unknown>): DashboardElement => ({ type, props });
+const node = (type: string, props: Record<string, unknown>): DashboardElement => ({ type, props, children: [] });
 const money = (value: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(value);
 
 function buildCustomerRankingSpec(intent: string): DashboardSpec | null {
   const ranking = parseCustomerBillingRanking(intent);
   if (!ranking) return null;
-  const recipe = UI_MEMORY_RECIPES[0];
+  const recipe = UI_MEMORY_RECIPES[1];
   const period = ranking.monthIndex === 11 ? "Septiembre 2026" : "Agosto 2026";
   const rows = [...analytics.customers.billingProfiles]
     .sort((a, b) => ranking.direction === "desc"
@@ -100,12 +129,37 @@ function buildCustomerRankingSpec(intent: string): DashboardSpec | null {
   };
 }
 
+function buildRecentBillingSpec(intent: string): DashboardSpec | null {
+  const request = parseRecentCustomerBilling(intent);
+  if (!request) return null;
+  const recipe = UI_MEMORY_RECIPES[0];
+  const period = request.monthIndex === 11 ? "Septiembre 2026" : "Agosto 2026";
+  const rows = billingLedgerForMonth(request.monthIndex).slice(0, request.count);
+  return {
+    root: "root",
+    state: { uiMemory: { recipeId: recipe.id, recipeVersion: recipe.version, recipeName: recipe.name, origin: recipe.origin } },
+    elements: {
+      root: { type: "TableFocus", props: { title: `${rows.length} clientes con facturación más reciente`, subtitle: `${period} · Registros demo hasta ${BILLING_DEMO_AS_OF} · Fecha descendente`, periodLabel: period }, children: ["ledger"] },
+      ledger: node("BillingLedger", {
+        title: "Últimas facturaciones por cliente",
+        description: "Nombre, fecha e importe exacto del registro demo. Fechas e importes simulados a partir del MRR; no son facturas reales.",
+        data: rows,
+        span: "wide",
+      }),
+    },
+  };
+}
+
 export function buildUiMemorySpec(intent: string): DashboardSpec | null {
+  const recentSpec = buildRecentBillingSpec(intent);
+  if (recentSpec) return recentSpec;
   const rankingSpec = buildCustomerRankingSpec(intent);
   if (rankingSpec) return rankingSpec;
   const recipe = findUiRecipe(intent);
   if (!recipe) return null;
-  const profiles = analytics.customers.billingProfiles.slice(0, 14);
+  const normalized = normalize(intent);
+  const requestedCount = normalized.match(/\b(\d{1,2})\s+(?:clientes?|usuarios?|customers?|users?)\b/)?.[1];
+  const profiles = analytics.customers.billingProfiles.slice(0, requestedCount ? Math.min(50, Math.max(1, Number(requestedCount))) : 14);
   const declining = profiles.filter((profile) => profile.change < 0);
   const growing = profiles.filter((profile) => profile.change > 0);
   const visibleMrr = profiles.reduce((sum, profile) => sum + profile.current, 0);

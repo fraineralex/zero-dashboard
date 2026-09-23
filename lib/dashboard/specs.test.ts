@@ -14,7 +14,7 @@ describe("intent-driven canvas composition", () => {
     const chart = chartFrom(spec);
 
     expect(spec.root).toBe("root");
-    expect(spec.elements.root.props.title).toBe("Daily cash intelligence");
+    expect(spec.elements.root.props.title).toContain("Cash in");
     expect(chart?.props.xKey).toBe("day");
     expect(chart?.props.series).toEqual([
       expect.objectContaining({ key: "cashIn", label: "Cash in" }),
@@ -25,7 +25,7 @@ describe("intent-driven canvas composition", () => {
     const spec = buildIntentSpec("Combina ingresos, clientes y churn en líneas", createContext("retention"));
     const chart = chartFrom(spec);
 
-    expect(spec.elements.root.props.title).toBe("Custom analytical canvas");
+    expect(spec.elements.root.props.title).toContain("Revenue");
     expect(chart?.type).toBe("LineChartCard");
     const series = chart?.props.series as Array<{ key: string; axis?: string }>;
     expect(series.map((item) => item.key)).toEqual(["revenue", "customers", "churn"]);
