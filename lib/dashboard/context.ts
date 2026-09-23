@@ -73,11 +73,11 @@ export function suggestionsFor(context: AnalyticsContext): string[] {
     return ["Which source converts best?", "Show the acquisition funnel", "Compare paid and organic", "Where do trials drop?"];
   }
   return [
-    "Why did revenue change?",
-    "Which customers are at risk?",
-    "Show enterprise performance",
-    "What's driving churn?",
-    "Compare this month with last month",
+    "Últimas 10 órdenes de compra a proveedores",
+    "Últimas 10 órdenes de venta",
+    "Productos con inventario bajo",
+    "Muéstrame la nómina de empleados",
+    "Últimos registros de asistencia",
   ];
 }
 

@@ -1,4 +1,5 @@
 import { parseCustomerBillingRanking, parseRecentCustomerBilling } from "@/lib/ui-memory/registry";
+import { parseErpIntent } from "@/lib/erp/intent";
 import type { DashboardElement, DashboardSpec } from "@/types/analytics";
 
 const normalize = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -6,7 +7,20 @@ const rows = (element: DashboardElement | undefined) => Array.isArray(element?.p
 
 export function requestFidelityIssue(intent: string, spec: DashboardSpec): string | null {
   const value = normalize(intent);
-  if (/\b(proveedor(?:es)?|vendor(?:s)?|nomina|payroll|salario(?:s)?|salary|salaries)\b/.test(value)) return "No hay registros de proveedores ni nómina en los datos demo disponibles.";
+  const erp = parseErpIntent(intent);
+  if (!erp && ["salesAndPurchases", "purchasesBySupplier"].includes((spec.state?.erp as { collection?: string } | undefined)?.collection ?? "")) return null;
+  if (erp) {
+    if (/\b(?:202[0-5]|202[7-9])\b|\b(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|octubre|noviembre|diciembre)\b/.test(value)) return "Los registros ERP simulados cubren solo septiembre de 2026.";
+    if (/\b(?:hoy|ayer|today|yesterday|esta semana|semana pasada)\b/.test(value)) return "Los registros ERP simulados no cubren con precisión ese período relativo.";
+    const metadata = spec.state?.erp as { collection?: string } | undefined;
+    const table = Object.values(spec.elements).find((element) => element.type === "DataTable");
+    const records = rows(table);
+    if (metadata?.collection !== erp.collection || !table) return "La respuesta no corresponde al módulo ERP solicitado.";
+    if (records.length !== (erp.mode === "low" ? records.length : erp.count)) return `Se solicitaron ${erp.count} registros y la vista muestra otra cantidad.`;
+    if (erp.collection === "purchaseOrders" && records.some((row) => !row.supplier || !row.id || !row.date || typeof row.amount !== "number")) return "Faltan proveedor, orden, fecha o importe de compra.";
+    return null;
+  }
+  if (/\b(proveedor(?:es)?|vendor(?:s)?|nomina|payroll|salario(?:s)?|salary|salaries)\b/.test(value)) return "La solicitud requiere un detalle de ERP aún no disponible en los datos demo.";
   if (/\b(ciudad(?:es)?|cit(?:y|ies))\b/.test(value)) return "Los datos demo incluyen país, pero no ciudad.";
   if (/\b(?:202[0-4]|202[7-9])\b/.test(value)) return "El historial demo solo abarca octubre de 2025 a septiembre de 2026.";
   if (/\b(?:todo el ano|ano completo|full year|annual total)\b/.test(value)) return "El historial demo no contiene un año calendario completo.";

@@ -1,5 +1,7 @@
 import { analytics } from "@/lib/analytics/engine";
 import { buildUiMemorySpec } from "@/lib/ui-memory/registry";
+import { buildErpSpec } from "@/lib/erp/intent";
+import { demoErpProvider } from "@/lib/erp/demo";
 import type { AnalyticsContext, DashboardElement, DashboardSpec } from "@/types/analytics";
 
 const usd = (value: number, compact = true) =>
@@ -23,19 +25,20 @@ function spec(layout: string, title: string, subtitle: string, elements: Record<
 }
 
 function overviewSpec(): DashboardSpec {
-  const a = analytics;
-  return spec("OverviewGrid", "Business overview", "September 2026 · Compared with August", {
-    revenue: node("MetricCard", { label: "Revenue", value: usd(a.revenue.current), delta: delta(a.revenue.delta), tone: a.revenue.delta < 0 ? "negative" : "positive", helper: "Monthly recurring revenue", action: "revenue" }),
-    customers: node("MetricCard", { label: "Customers", value: number(a.customers.total), delta: `+${a.customers.newThisMonth}`, tone: "neutral", helper: "New this month", action: "customers" }),
-    churn: node("MetricCard", { label: "Churn", value: `${a.retention.churnRate.toFixed(1)}%`, delta: "+0.8 pts", tone: "negative", helper: "Customer churn", action: "retention" }),
-    conversion: node("MetricCard", { label: "Conversion", value: `${a.acquisition.conversion.toFixed(1)}%`, delta: "+0.6 pts", tone: "positive", helper: "Visitor to customer", action: "acquisition" }),
-    trend: node("LineChartCard", { title: "Revenue trend", description: "Twelve-month recurring revenue", data: a.revenue.history, xKey: "month", series: [{ key: "revenue", label: "Revenue" }], format: "currency", span: "wide", action: "revenue" }),
-    plans: node("BarChartCard", { title: "Revenue by plan", description: "Current monthly recurring revenue", data: a.revenue.byPlan, xKey: "name", series: [{ key: "value", label: "MRR" }], format: "currency", span: "half" }),
-    customersTrend: node("AreaChartCard", { title: "New customers", description: "Monthly additions", data: a.months.map((month, i) => ({ month, customers: 98 + i * 4 + (i % 3) * 17 })), xKey: "month", series: [{ key: "customers", label: "Customers" }], format: "number", span: "half" }),
-    funnel: node("FunnelCard", { title: "Acquisition funnel", description: "September conversion journey", data: a.acquisition.funnel, span: "half" }),
-    churnTrend: node("AreaChartCard", { title: "Churn trend", description: "Monthly customer churn", data: a.retention.history, xKey: "month", series: [{ key: "churn", label: "Churn" }], format: "percent", span: "half" }),
-    risk: node("InsightCard", { eyebrow: "Suggested from your data", title: "Enterprise MRR fell sharply", body: `${usd(Math.abs(a.enterprise.current - a.enterprise.previous))} less MRR than August. Acme and Meridian account for most of the decline.`, stat: delta(a.enterprise.delta), actionLabel: "Investigate decline", actionIntent: "Show me why enterprise revenue dropped this month", span: "wide", tone: "negative" }),
-  }, ["revenue", "customers", "churn", "conversion", "trend", "plans", "customersTrend", "funnel", "churnTrend", "risk"]);
+  const po = demoErpProvider.list("purchaseOrders");
+  const so = demoErpProvider.list("salesOrders");
+  const bills = demoErpProvider.list("vendorBills");
+  const stock = demoErpProvider.list("stock");
+  const dop = (value: number) => new Intl.NumberFormat("es-DO", { style: "currency", currency: "DOP", maximumFractionDigits: 0 }).format(value);
+  const sum = (records: readonly Record<string, string | number>[]) => records.reduce((total, row) => total + Number(row.amount), 0);
+  const movement = so.map((row, index) => ({ day: String(row.date).slice(-2), ventas: row.amount, compras: po[index].amount })).reverse();
+  return spec("OverviewGrid", "Tu empresa, en una sola vista", "Empresa demo · República Dominicana · datos simulados", {
+    sales: node("MetricCard", { label: "Órdenes de venta", value: dop(sum(so)), delta: `${so.length} órdenes`, tone: "neutral", helper: "Muestra de septiembre" }),
+    purchases: node("MetricCard", { label: "Órdenes de compra", value: dop(sum(po)), delta: `${po.length} órdenes`, tone: "neutral", helper: "Muestra de septiembre" }),
+    pending: node("MetricCard", { label: "Facturas de proveedor pendientes", value: dop(sum(bills.filter((row) => row.status === "Pendiente"))), delta: "Por pagar", tone: "neutral", helper: "Muestra de septiembre" }),
+    low: node("MetricCard", { label: "Productos por reponer", value: String(stock.filter((row) => Number(row.available) < Number(row.minimum)).length), delta: "Bajo mínimo", tone: "negative", helper: "Dos almacenes" }),
+    trend: node("LineChartCard", { title: "Ventas y compras", description: "Órdenes registradas por día · RD$ · datos simulados", data: movement, xKey: "day", series: [{ key: "ventas", label: "Ventas" }, { key: "compras", label: "Compras" }], format: "dop", span: "wide" }),
+  }, ["sales", "purchases", "pending", "low", "trend"]);
 }
 
 function revenueSpec(context: AnalyticsContext): DashboardSpec {
@@ -287,6 +290,8 @@ function accountingIntentSpec(intent: string, normalized: string): DashboardSpec
 }
 
 export function buildIntentSpec(intent: string, context: AnalyticsContext, initialSpec?: DashboardSpec): DashboardSpec {
+  const erpSpec = buildErpSpec(intent);
+  if (erpSpec) return erpSpec;
   const normalized = normalizeIntent(intent);
   const rememberedSpec = buildUiMemorySpec(intent);
   if (rememberedSpec) return rememberedSpec;

@@ -18,6 +18,7 @@ const spanClass = (span?: string) => span ? `span-${span}` : undefined;
 
 const formatValue = (value: string | number, format?: string) => {
   if (typeof value !== "number") return String(value);
+  if (format === "dop") return new Intl.NumberFormat("es-DO", { style: "currency", currency: "DOP", notation: "compact", maximumFractionDigits: 1 }).format(value);
   if (format === "currency") return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(value);
   if (format === "percent") return `${value.toFixed(1)}%`;
   return new Intl.NumberFormat("en-US", { notation: value > 9999 ? "compact" : "standard", maximumFractionDigits: 1 }).format(value);
@@ -201,11 +202,17 @@ export function CustomerHeader({ props }: { props: { name: string; segment: stri
   return <section className="entity-header span-wide"><div className="entity-monogram">AC</div><div className="entity-copy"><p>{props.segment}</p><h2>{props.name}</h2><span>{props.detail}</span></div><span className="risk-badge">{props.status}</span></section>;
 }
 
-export function DataTable({ props }: { props: BaseCardProps & { data: Record<string, unknown>[]; columns: { key: string; label: string; format?: string }[]; rowAction?: string } }) {
+export function DataTable({ props }: { props: BaseCardProps & { data: Record<string, unknown>[]; columns: { key: string; label: string; format?: string }[]; rowAction?: string; currency?: string; total?: number } }) {
   const openCustomer = useDashboardStore((state) => state.openCustomer);
+  const [query, setQuery] = useState("");
+  const visibleRows = props.currency === "DOP" && query ? props.data.filter((row) => Object.values(row).some((value) => String(value).toLocaleLowerCase("es-DO").includes(query.toLocaleLowerCase("es-DO")))) : props.data;
+  const dop = new Intl.NumberFormat("es-DO", { style: "currency", currency: "DOP", maximumFractionDigits: 0 });
   return (
     <CardFrame {...props} className="table-card">
-      <div className="table-scroll"><table><thead><tr>{props.columns.map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{props.data.map((row, index) => <tr key={String(row.id ?? row.customer ?? index)} className={props.rowAction ? "clickable-row" : undefined} onClick={props.rowAction && String(row.id ?? "").includes("acme") ? () => openCustomer("acme") : undefined}>{props.columns.map((column) => <td key={column.key}>{formatValue(row[column.key] as string | number, column.format)}{column.key === "customer" && String(row.id ?? "").includes("acme") ? <ChevronRight size={13} /> : null}</td>)}</tr>)}</tbody></table></div>
+      {props.currency === "DOP" ? <div className="erp-table-toolbar"><span><span className="erp-source-dot" />{props.data.length} registros · ERP demo</span><label><Search size={14} /><span className="sr-only">Filtrar registros</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filtrar esta vista…" /></label></div> : null}
+      <div className="table-scroll"><Table className={props.currency === "DOP" ? "erp-table" : undefined}><TableHeader><TableRow>{props.columns.map((column) => <TableHead key={column.key}>{column.label}</TableHead>)}</TableRow></TableHeader><TableBody>{visibleRows.map((row, index) => <TableRow key={String(row.id ?? row.customer ?? index)} className={props.rowAction ? "clickable-row" : undefined} onClick={props.rowAction && String(row.id ?? "").includes("acme") ? () => openCustomer("acme") : undefined}>{props.columns.map((column) => <TableCell key={column.key} className={cn(column.format === "dop" && "erp-amount", column.key === "status" && "erp-status-cell")}>{column.key === "status" && props.currency === "DOP" ? <span className="erp-status">{String(row[column.key])}</span> : column.format === "dop" ? dop.format(Number(row[column.key])) : formatValue(row[column.key] as string | number, column.format)}{column.key === "customer" && String(row.id ?? "").includes("acme") ? <ChevronRight size={13} /> : null}</TableCell>)}</TableRow>)}{visibleRows.length === 0 ? <TableRow><TableCell colSpan={props.columns.length}>No hay coincidencias en esta vista.</TableCell></TableRow> : null}</TableBody></Table></div>
+      {props.currency === "DOP" ? <div className="erp-mobile-records">{visibleRows.map((row, index) => <article key={String(row.id ?? index)} className="erp-mobile-record"><div className="erp-mobile-record-head"><strong>{String(row.id ?? row.employee ?? row.product ?? index + 1)}</strong>{typeof row.amount === "number" || typeof row.net === "number" ? <b>{dop.format(Number(row.amount ?? row.net))}</b> : null}</div><div className="erp-mobile-fields">{props.columns.filter((column) => column.key !== "id" && column.key !== "amount" && column.key !== "net").map((column) => <div key={column.key}><span>{column.label}</span><strong>{column.format === "dop" ? dop.format(Number(row[column.key])) : String(row[column.key] ?? "—")}</strong></div>)}</div></article>)}{visibleRows.length === 0 ? <p className="erp-mobile-empty">No hay coincidencias en esta vista.</p> : null}</div> : null}
+      {typeof props.total === "number" && !query ? <div className="erp-table-total"><span>Total de los {props.data.length} registros mostrados</span><strong>{dop.format(props.total)}</strong></div> : null}
     </CardFrame>
   );
 }

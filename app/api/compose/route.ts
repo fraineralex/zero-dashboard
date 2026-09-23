@@ -73,6 +73,7 @@ export async function POST(request: Request) {
   const context = payload.context as AnalyticsContext;
   const resolved = resolveCandidates(context, payload.intent);
   const prepared = buildIntentSpec(payload.intent, context, payload.initialSpec);
+  const preparedErp = Boolean(prepared.state?.erp);
   const fidelityIssue = payload.source === "navigation" ? null : requestFidelityIssue(payload.intent, prepared);
   const fallback = fidelityIssue ? unavailableSpec(fidelityIssue) : prepared;
   const memoryRecipe = findUiRecipe(payload.intent);
@@ -86,17 +87,17 @@ export async function POST(request: Request) {
       const send = (value: unknown) => controller.enqueue(encoder.encode(ndjson(value)));
       const focusedBilling = memoryRecipe?.id === "customer-billing-ranking" || memoryRecipe?.id === "recent-customer-billing";
       const explicitPie = Object.values(fallback.elements).some((element) => element.type === "PieChartCard");
-      if (fidelityIssue || focusedBilling || explicitPie || !apiKey) {
+      if (fidelityIssue || focusedBilling || explicitPie || preparedErp || !apiKey) {
         // Explicit development path: all analysis and data are deterministic.
         // Production never silently claims an AI-selected composition here.
         send({
           type: "step",
           spec: fallback,
           diagnostics: {
-            mode: fidelityIssue || focusedBilling || explicitPie ? "deterministic" : "development-fallback",
+            mode: fidelityIssue || focusedBilling || explicitPie || preparedErp ? "deterministic" : "development-fallback",
             candidateCount: resolved.candidates.length,
             resolverMs: resolved.resolverMs,
-            stopReason: fidelityIssue ? "request-not-answerable" : focusedBilling ? "focused-billing-recipe" : explicitPie ? "explicit-pie-request" : "no-ai-gateway-credentials",
+            stopReason: fidelityIssue ? "request-not-answerable" : preparedErp ? "erp-data-contract" : focusedBilling ? "focused-billing-recipe" : explicitPie ? "explicit-pie-request" : "no-ai-gateway-credentials",
             uiMemory: deterministicCapabilityDecision(memoryRecipe),
           },
         });
