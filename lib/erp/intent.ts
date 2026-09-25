@@ -1,4 +1,4 @@
-import { demoErpProvider, type ErpCollection, type ErpRecord, type ErpReadProvider } from "@/lib/erp/demo";
+import { demoErpProvider, demoPosTickets, type ErpCollection, type ErpRecord, type ErpReadProvider } from "@/lib/erp/demo";
 import { buildCrossModuleComparisonSpec, buildSemanticErpSpec } from "@/lib/erp/query";
 import type { DashboardSpec } from "@/types/analytics";
 
@@ -37,6 +37,19 @@ export function parseErpIntent(intent: string): { collection: ErpCollection; cou
 }
 
 export function buildErpSpec(intent: string, provider: ErpReadProvider = demoErpProvider): DashboardSpec | null {
+  if (/\b(?:punto de venta|terminal(?:es)? de venta|pos)\b/.test(clean(intent))) {
+    const tickets = [...demoPosTickets].sort((a, b) => b.date.localeCompare(a.date));
+    const total = tickets.reduce((sum, ticket) => sum + ticket.amount, 0);
+    const dop = (value: number) => new Intl.NumberFormat("es-DO", { style: "currency", currency: "DOP", maximumFractionDigits: 0 }).format(value);
+    return { root: "root", state: { erp: { collection: "posTickets", source: "demo", count: tickets.length } }, elements: {
+      root: { type: "AnalysisGrid", props: { title: "Punto de venta", subtitle: "Septiembre 2026 · operaciones POS · datos simulados", periodLabel: "Muestra · 12 tickets" }, children: ["sales", "tickets", "average", "trend", "records"] },
+      sales: { type: "MetricCard", props: { label: "Ventas cobradas", value: dop(total), helper: "En los tickets de la muestra", tone: "neutral" }, children: [] },
+      tickets: { type: "MetricCard", props: { label: "Tickets pagados", value: String(tickets.length), helper: "Operaciones POS", tone: "neutral" }, children: [] },
+      average: { type: "MetricCard", props: { label: "Ticket promedio", value: dop(Math.round(total / tickets.length)), helper: "Ventas ÷ tickets", tone: "neutral" }, children: [] },
+      trend: { type: "BarChartCard", props: { title: "Ventas por día", description: "Importe cobrado en cada fecha de la muestra · RD$", data: [...tickets].reverse().map((ticket) => ({ day: ticket.date.slice(-2), amount: ticket.amount })), xKey: "day", series: [{ key: "amount", label: "Ventas cobradas", format: "dop" }], format: "dop", span: "wide" }, children: [] },
+      records: { type: "DataTable", props: { title: "Tickets recientes", description: "Identificador, caja, medio de pago e importe · datos simulados", data: tickets, columns: [{ key: "id", label: "Ticket" }, { key: "date", label: "Fecha" }, { key: "register", label: "Caja" }, { key: "paymentMethod", label: "Pago" }, { key: "items", label: "Ítems" }, { key: "amount", label: "Cobrado", format: "dop" }], currency: "DOP", total, span: "wide" }, children: [] },
+    } };
+  }
   const crossModule = buildCrossModuleComparisonSpec(intent, provider);
   if (crossModule) return crossModule;
   const semantic = buildSemanticErpSpec(intent, provider);

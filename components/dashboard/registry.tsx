@@ -4,6 +4,7 @@ import { defineRegistry, JSONUIProvider, Renderer } from "@json-render/react";
 import { Copy, MoveHorizontal, X } from "lucide-react";
 import type { DashboardElement, DashboardSpec } from "@/types/analytics";
 import { dashboardCatalog } from "@/lib/dashboard/catalog";
+import { balancedCanvasSpans } from "@/lib/dashboard/layout";
 import {
   AreaChartCard,
   BarChartCard,
@@ -70,13 +71,14 @@ export function DashboardRenderer({ spec, loading }: { spec: DashboardSpec; load
   if (!root || !variant) {
     return <JSONUIProvider registry={registry} initialState={spec.state ?? {}}><Renderer spec={spec} registry={registry} loading={loading} /></JSONUIProvider>;
   }
+  const balancedSpans = balancedCanvasSpans(root.children ?? [], spec.elements);
   return (
     <JSONUIProvider registry={registry} initialState={spec.state ?? {}}>
       <Layout props={root.props as { title: string; subtitle: string; periodLabel?: string }} variant={variant}>
         {root.children?.map((id) => {
           const element = spec.elements[id];
           if (!element) return null;
-          return <CanvasBlock key={id} id={id} element={element}><Renderer spec={{ ...spec, root: id }} registry={registry} loading={loading} fallback={({ element: unknown }) => <div className="dashboard-card">Unknown component: {unknown.type}</div>} /></CanvasBlock>;
+          return <CanvasBlock key={id} id={id} element={element} balancedSpan={balancedSpans[id]}><Renderer spec={{ ...spec, root: id }} registry={registry} loading={loading} fallback={({ element: unknown }) => <div className="dashboard-card">Unknown component: {unknown.type}</div>} /></CanvasBlock>;
         })}
         {!root.children?.length ? <EmptyCanvas /> : null}
       </Layout>
@@ -94,12 +96,12 @@ const layoutVariants: Record<string, string> = {
   StoryLayout: "story",
 };
 
-function CanvasBlock({ id, element, children }: { id: string; element: DashboardElement; children: React.ReactNode }) {
+function CanvasBlock({ id, element, balancedSpan, children }: { id: string; element: DashboardElement; balancedSpan?: number; children: React.ReactNode }) {
   const removeElement = useDashboardStore((state) => state.removeElement);
   const resizeElement = useDashboardStore((state) => state.resizeElement);
   const duplicateElement = useDashboardStore((state) => state.duplicateElement);
   const span = typeof element.props.span === "string" ? element.props.span : undefined;
-  return <div className={cn("canvas-block", span && `span-${span}`, element.type === "MetricCard" && "metric-block", element.type === "ComparisonSummary" && "comparison-summary-block", ["FindingCard", "CustomerHeader"].includes(element.type) && "span-wide")}>
+  return <div className={cn("canvas-block", span && `span-${span}`, balancedSpan && `balanced-span-${balancedSpan}`, element.type === "MetricCard" && "metric-block", element.type === "ComparisonSummary" && "comparison-summary-block", ["FindingCard", "CustomerHeader"].includes(element.type) && "span-wide")}>
     <div className="block-controls" aria-label="Block controls">
       <button onClick={() => resizeElement(id)} title="Change block size" aria-label="Change block size"><MoveHorizontal size={13} /></button>
       <button onClick={() => duplicateElement(id)} title="Duplicate block" aria-label="Duplicate block"><Copy size={12} /></button>

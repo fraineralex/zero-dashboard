@@ -2,7 +2,7 @@
 
 import { type ReactNode, useMemo, useState } from "react";
 import { ArrowDownRight, ArrowUpDown, ArrowUpRight, Check, ChevronRight, CircleAlert, Minus, Search, X } from "lucide-react";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, LabelList, Line, LineChart, Pie, PieChart, XAxis, YAxis } from "recharts";
 import { ChartContainer, ChartLegend, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
@@ -18,11 +18,18 @@ const spanClass = (span?: string) => span ? `span-${span}` : undefined;
 
 const formatValue = (value: string | number, format?: string) => {
   if (typeof value !== "number") return String(value);
-  if (format === "dop") return new Intl.NumberFormat("es-DO", { style: "currency", currency: "DOP", notation: "compact", maximumFractionDigits: 1 }).format(value);
+  if (format === "dop") {
+    const magnitude = Math.abs(value);
+    const divisor = magnitude >= 1_000_000 ? 1_000_000 : magnitude >= 1_000 ? 1_000 : 1;
+    const suffix = divisor === 1_000_000 ? "M" : divisor === 1_000 ? "K" : "";
+    return `RD$${new Intl.NumberFormat("en-US", { maximumFractionDigits: divisor === 1_000_000 ? 2 : 1 }).format(value / divisor)}${suffix}`;
+  }
   if (format === "currency") return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 1 }).format(value);
   if (format === "percent") return `${value.toFixed(1)}%`;
   return new Intl.NumberFormat("en-US", { notation: value > 9999 ? "compact" : "standard", maximumFractionDigits: 1 }).format(value);
 };
+
+const axisWidth = (format?: string) => format === "dop" ? 84 : format === "currency" ? 64 : 54;
 
 function CardFrame({ title, description, span, children, className }: BaseCardProps & { children: ReactNode; className?: string }) {
   return (
@@ -96,8 +103,8 @@ export function LineChartCard({ props }: { props: BaseCardProps & { data: ChartR
           <LineChart data={chartData} margin={{ top: 12, right: 8, bottom: 0, left: 0 }}>
             <CartesianGrid vertical={false} stroke="var(--grid-line)" />
             <XAxis dataKey={props.xKey} tickLine={false} axisLine={false} tickMargin={10} interval="preserveStartEnd" minTickGap={24} />
-            <YAxis yAxisId="left" domain={normalized ? [0, 100] : undefined} tickLine={false} axisLine={false} width={54} tickFormatter={(value) => normalized ? `${Math.round(value)}` : formatValue(value, leftSeries?.format ?? props.format)} />
-            {!normalized && rightSeries ? <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} width={48} tickFormatter={(value) => formatValue(value, rightSeries.format)} /> : null}
+            <YAxis yAxisId="left" domain={normalized ? [0, 100] : undefined} tickLine={false} axisLine={false} width={normalized ? 42 : axisWidth(leftSeries?.format ?? props.format)} tickFormatter={(value) => normalized ? `${Math.round(value)}` : formatValue(value, leftSeries?.format ?? props.format)} />
+            {!normalized && rightSeries ? <YAxis yAxisId="right" orientation="right" tickLine={false} axisLine={false} width={axisWidth(rightSeries.format)} tickFormatter={(value) => formatValue(value, rightSeries.format)} /> : null}
             <ChartTooltip cursor={{ stroke: "var(--border-strong)", strokeDasharray: "3 3" }} content={<ChartTooltipContent formatter={(value, name, item) => { const source = props.series.find((series) => series.label === name); const actual = normalized && source ? item.payload?.[source.key] : value; return formatValue(actual as string | number, source?.format ?? props.format); }} />} />
             {displaySeries.map((series, index) => <Line key={series.key} name={series.label} yAxisId={normalized ? "left" : series.axis ?? "left"} dataKey={series.displayKey} type="monotone" stroke={`var(--color-${series.displayKey})`} strokeWidth={index === 0 ? 2.2 : 1.8} strokeDasharray={index > 2 ? "4 3" : undefined} dot={false} activeDot={{ r: 3 }} isAnimationActive={false} />)}
             {props.series.length > 1 ? <ChartLegend verticalAlign="top" height={24} /> : null}
@@ -121,7 +128,7 @@ export function AreaChartCard({ props }: { props: BaseCardProps & { data: ChartR
           <defs>{props.series.map((series) => <linearGradient key={series.key} id={`fill-${series.key}`} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor={`var(--color-${series.key})`} stopOpacity={0.18} /><stop offset="95%" stopColor={`var(--color-${series.key})`} stopOpacity={0} /></linearGradient>)}</defs>
           <CartesianGrid vertical={false} stroke="var(--grid-line)" />
           <XAxis dataKey={props.xKey} tickLine={false} axisLine={false} tickMargin={10} interval="preserveStartEnd" />
-          <YAxis tickLine={false} axisLine={false} width={48} tickFormatter={(value) => formatValue(value, firstSeries?.format ?? props.format)} />
+          <YAxis tickLine={false} axisLine={false} width={axisWidth(firstSeries?.format ?? props.format)} tickFormatter={(value) => formatValue(value, firstSeries?.format ?? props.format)} />
           <ChartTooltip content={<ChartTooltipContent formatter={(value, name) => formatValue(value, props.series.find((item) => item.label === name)?.format ?? props.format)} />} />
           {props.series.map((series) => <Area key={series.key} name={series.label} dataKey={series.key} type="monotone" stroke={`var(--color-${series.key})`} fill={`url(#fill-${series.key})`} strokeWidth={2} isAnimationActive={false} />)}
           {props.series.length > 1 ? <ChartLegend verticalAlign="top" height={24} /> : null}
@@ -136,12 +143,14 @@ export function BarChartCard({ props }: { props: BaseCardProps & { data: ChartRo
   return (
     <CardFrame {...props}>
       <ChartContainer config={chartConfig(props.series)} className="chart-standard" aria-label={`${props.title} chart`}>
-        <BarChart data={props.data} layout={props.horizontal ? "vertical" : "horizontal"} margin={{ top: 12, right: 10, bottom: 0, left: props.horizontal ? 8 : 0 }}>
+        <BarChart data={props.data} layout={props.horizontal ? "vertical" : "horizontal"} margin={{ top: props.data.length <= 6 ? 23 : 12, right: 10, bottom: 0, left: props.horizontal ? 8 : 0 }}>
           <CartesianGrid vertical={!props.horizontal} horizontal={props.horizontal} stroke="var(--grid-line)" />
           {props.horizontal ? <YAxis dataKey={props.xKey} type="category" tickLine={false} axisLine={false} width={128} tickFormatter={(value: string) => value.length > 17 ? `${value.slice(0, 16)}…` : value} /> : <XAxis dataKey={props.xKey} tickLine={false} axisLine={false} tickMargin={10} />}
-          {props.horizontal ? <XAxis type="number" hide /> : <YAxis tickLine={false} axisLine={false} width={48} tickFormatter={(value) => formatValue(value, firstSeries?.format ?? props.format)} />}
+          {props.horizontal ? <XAxis type="number" hide /> : <YAxis tickLine={false} axisLine={false} width={axisWidth(firstSeries?.format ?? props.format)} tickFormatter={(value) => formatValue(value, firstSeries?.format ?? props.format)} />}
           <ChartTooltip cursor={{ fill: "var(--muted)" }} content={<ChartTooltipContent formatter={(value, name) => formatValue(value, props.series.find((item) => item.label === name)?.format ?? props.format)} />} />
-          {props.series.map((series) => <Bar key={series.key} name={series.label} dataKey={series.key} fill={`var(--color-${series.key})`} radius={props.horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0]} maxBarSize={34} isAnimationActive={false} />)}
+          {props.series.map((series) => <Bar key={series.key} name={series.label} dataKey={series.key} fill={`var(--color-${series.key})`} radius={props.horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0]} maxBarSize={34} isAnimationActive={false}>
+            {!props.horizontal && props.series.length === 1 && props.data.length <= 6 ? <LabelList dataKey={series.key} position="top" formatter={(value) => formatValue(Number(value ?? 0), series.format ?? props.format)} className="chart-value-label" /> : null}
+          </Bar>)}
           {props.series.length > 1 ? <ChartLegend verticalAlign="top" height={24} /> : null}
         </BarChart>
       </ChartContainer>

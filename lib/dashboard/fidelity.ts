@@ -8,6 +8,12 @@ const rows = (element: DashboardElement | undefined) => Array.isArray(element?.p
 
 export function requestFidelityIssue(intent: string, spec: DashboardSpec): string | null {
   const value = normalize(intent);
+  if (/\b(?:punto de venta|terminal(?:es)? de venta|pos)\b/.test(value)) {
+    const erp = spec.state?.erp as { collection?: string } | undefined;
+    const records = rows(Object.values(spec.elements).find((element) => element.type === "DataTable"));
+    if (erp?.collection !== "posTickets" || !records.length || records.some((row) => !row.id || !row.register || typeof row.amount !== "number")) return "Se pidió punto de venta, pero faltan tickets POS identificables con caja e importe.";
+    return null;
+  }
   const crossModuleIssue = crossModuleFidelityIssue(intent, spec);
   if (crossModuleIssue !== undefined) return crossModuleIssue;
   const semanticIssue = semanticFidelityIssue(intent, spec);

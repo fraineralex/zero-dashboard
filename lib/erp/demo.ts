@@ -39,6 +39,17 @@ const salesLines = salesOrders.flatMap((order, orderIndex) => {
   });
 });
 
+/** Sample POS tickets, deliberately separate from quotations/orders and recurring revenue. */
+export const demoPosTickets = Array.from({ length: 12 }, (_, index) => ({
+  id: `POS-2026-${String(912 - index).padStart(4, "0")}`,
+  date: date(index),
+  register: ["Caja principal", "Caja tienda", "Caja sucursal"][index % 3],
+  paymentMethod: ["Tarjeta", "Efectivo", "Transferencia"][index % 3],
+  items: 1 + index % 5,
+  amount: 1840 + (11 - index) * 415 + (index % 3) * 230,
+  status: "Pagado",
+}));
+
 const data: Record<ErpCollection, ErpRecord[]> = {
   purchaseOrders: suppliers.map((supplier, index) => ({ id: `PO-2026-${String(147 - index).padStart(4, "0")}`, date: date(index), supplier, items: 3 + index % 6, amount: 45800 + (11 - index) * 7190, status: ["Por aprobar", "Confirmada", "Recibida", "En tránsito"][index % 4] })),
   salesOrders,
