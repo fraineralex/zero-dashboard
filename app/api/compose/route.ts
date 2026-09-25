@@ -90,6 +90,39 @@ export async function POST(request: Request) {
       const send = (value: unknown) => controller.enqueue(encoder.encode(ndjson(value)));
       const focusedBilling = memoryRecipe?.id === "customer-billing-ranking" || memoryRecipe?.id === "recent-customer-billing";
       const explicitPie = Object.values(fallback.elements).some((element) => element.type === "PieChartCard");
+      const comparison = (prepared.state?.erp as { collection?: string } | undefined)?.collection === "moduleComparison";
+      if (comparison) {
+        if (fidelityIssue) {
+          send({ type: "step", spec: fallback, diagnostics: { mode: "deterministic", stopReason: "comparison-data-unavailable" } });
+          send({ type: "complete", spec: fallback });
+          controller.close();
+          return;
+        }
+        let uiMemory = deterministicCapabilityDecision(memoryRecipe);
+        if (apiKey) {
+          try {
+            const evaluate = experimental_createEvaluator({ model: "typesafe-ai/jev", apiKey, timeoutMs: 10_000 });
+            uiMemory = await evaluateCapabilityDecision(payload.intent, memoryRecipe, evaluate, AbortSignal.timeout(4_500));
+          } catch (error) {
+            logCompositionFailure("jev-module-comparison", error);
+          }
+          try {
+            const generated = await composeWithLuna(payload.intent, resolved.candidates, prepared, AbortSignal.timeout(10_000));
+            const issue = requestFidelityIssue(payload.intent, generated);
+            if (issue) throw new Error(issue);
+            send({ type: "step", spec: generated, diagnostics: { mode: "luna", stopReason: "validated-module-comparison", uiMemory } });
+            send({ type: "complete", spec: generated });
+            controller.close();
+            return;
+          } catch (error) {
+            logCompositionFailure("luna-module-comparison", error);
+          }
+        }
+        send({ type: "step", spec: prepared, diagnostics: { mode: "deterministic", stopReason: apiKey ? "validated-comparison-fallback" : "comparison-model-unavailable", uiMemory } });
+        send({ type: "complete", spec: prepared });
+        controller.close();
+        return;
+      }
       if (dynamicErp) {
         if (!apiKey) {
           const unavailable = unavailableSpec("La planificación de esta consulta ERP requiere el modelo de composición, que no está configurado en este entorno.");

@@ -33,7 +33,7 @@ const root = (title: string, subtitle: string, children: string[], layout = "Ana
 
 export function isCrossModuleComparison(intent: string): boolean {
   const text = normalize(intent);
-  return /nomina|payroll|salarios?|sueldos?/.test(text) && /compras?|adquisiciones?/.test(text) && /ventas?|ingresos?/.test(text) && /grafico|grafica|compara|comparacion|versus|\bvs\b/.test(text);
+  return !/\b(?:punto de venta|terminal(?:es)? de venta|pos)\b/.test(text) && /nomina|payroll|salarios?|sueldos?/.test(text) && /compras?|adquisiciones?/.test(text) && /ventas?|ingresos?/.test(text) && /grafico|grafica|compara|comparacion|versus|\bvs\b/.test(text);
 }
 
 export function buildCrossModuleComparisonSpec(intent: string, provider: ErpReadProvider = demoErpProvider): DashboardSpec | null {

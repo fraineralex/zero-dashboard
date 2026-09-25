@@ -1,6 +1,7 @@
 import { parseCustomerBillingRanking, parseRecentCustomerBilling } from "@/lib/ui-memory/registry";
 import { parseErpIntent } from "@/lib/erp/intent";
 import { crossModuleFidelityIssue, dynamicFidelityIssue, semanticFidelityIssue } from "@/lib/erp/query";
+import { flexibleComparisonFidelityIssue } from "@/lib/erp/comparison";
 import type { DashboardElement, DashboardSpec } from "@/types/analytics";
 
 const normalize = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -8,14 +9,16 @@ const rows = (element: DashboardElement | undefined) => Array.isArray(element?.p
 
 export function requestFidelityIssue(intent: string, spec: DashboardSpec): string | null {
   const value = normalize(intent);
+  const crossModuleIssue = crossModuleFidelityIssue(intent, spec);
+  if (crossModuleIssue !== undefined) return crossModuleIssue;
+  const flexibleIssue = flexibleComparisonFidelityIssue(intent, spec);
+  if (flexibleIssue !== undefined) return flexibleIssue;
   if (/\b(?:punto de venta|terminal(?:es)? de venta|pos)\b/.test(value)) {
     const erp = spec.state?.erp as { collection?: string } | undefined;
     const records = rows(Object.values(spec.elements).find((element) => element.type === "DataTable"));
     if (erp?.collection !== "posTickets" || !records.length || records.some((row) => !row.id || !row.register || typeof row.amount !== "number")) return "Se pidió punto de venta, pero faltan tickets POS identificables con caja e importe.";
     return null;
   }
-  const crossModuleIssue = crossModuleFidelityIssue(intent, spec);
-  if (crossModuleIssue !== undefined) return crossModuleIssue;
   const semanticIssue = semanticFidelityIssue(intent, spec);
   if (semanticIssue !== undefined) return semanticIssue;
   const dynamicIssue = dynamicFidelityIssue(intent, spec);

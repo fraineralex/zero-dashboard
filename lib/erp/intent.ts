@@ -1,5 +1,6 @@
 import { demoErpProvider, demoPosTickets, type ErpCollection, type ErpRecord, type ErpReadProvider } from "@/lib/erp/demo";
 import { buildCrossModuleComparisonSpec, buildSemanticErpSpec } from "@/lib/erp/query";
+import { buildFlexibleComparisonSpec } from "@/lib/erp/comparison";
 import type { DashboardSpec } from "@/types/analytics";
 
 const clean = (text: string) => text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -37,6 +38,10 @@ export function parseErpIntent(intent: string): { collection: ErpCollection; cou
 }
 
 export function buildErpSpec(intent: string, provider: ErpReadProvider = demoErpProvider): DashboardSpec | null {
+  const crossModule = buildCrossModuleComparisonSpec(intent, provider);
+  if (crossModule) return crossModule;
+  const flexibleComparison = buildFlexibleComparisonSpec(intent, provider);
+  if (flexibleComparison) return flexibleComparison;
   if (/\b(?:punto de venta|terminal(?:es)? de venta|pos)\b/.test(clean(intent))) {
     const tickets = [...demoPosTickets].sort((a, b) => b.date.localeCompare(a.date));
     const total = tickets.reduce((sum, ticket) => sum + ticket.amount, 0);
@@ -50,12 +55,10 @@ export function buildErpSpec(intent: string, provider: ErpReadProvider = demoErp
       records: { type: "DataTable", props: { title: "Tickets recientes", description: "Identificador, caja, medio de pago e importe · datos simulados", data: tickets, columns: [{ key: "id", label: "Ticket" }, { key: "date", label: "Fecha" }, { key: "register", label: "Caja" }, { key: "paymentMethod", label: "Pago" }, { key: "items", label: "Ítems" }, { key: "amount", label: "Cobrado", format: "dop" }], currency: "DOP", total, span: "wide" }, children: [] },
     } };
   }
-  const crossModule = buildCrossModuleComparisonSpec(intent, provider);
-  if (crossModule) return crossModule;
   const semantic = buildSemanticErpSpec(intent, provider);
   if (semantic) return semantic;
   const text = clean(intent);
-  if (/compras?/.test(text) && /ventas?/.test(text) && /compar|combina|evolucion|tendencia|grafico|grafica/.test(text)) {
+  if (/compras?/.test(text) && /ventas?/.test(text) && /compar|combina|evolucion|tendencia|grafico|grafica|versus|\bvs\b/.test(text)) {
     const purchases = provider.list("purchaseOrders");
     const sales = provider.list("salesOrders");
     const chartData = sales.map((row) => ({ day: String(row.date).slice(-2), ventas: Number(row.amount), compras: Number(purchases.find((order) => order.date === row.date)?.amount ?? 0) })).reverse();
