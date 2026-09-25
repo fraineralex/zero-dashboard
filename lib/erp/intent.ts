@@ -1,5 +1,5 @@
 import { demoErpProvider, type ErpCollection, type ErpRecord, type ErpReadProvider } from "@/lib/erp/demo";
-import { buildSemanticErpSpec } from "@/lib/erp/query";
+import { buildCrossModuleComparisonSpec, buildSemanticErpSpec } from "@/lib/erp/query";
 import type { DashboardSpec } from "@/types/analytics";
 
 const clean = (text: string) => text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -37,6 +37,8 @@ export function parseErpIntent(intent: string): { collection: ErpCollection; cou
 }
 
 export function buildErpSpec(intent: string, provider: ErpReadProvider = demoErpProvider): DashboardSpec | null {
+  const crossModule = buildCrossModuleComparisonSpec(intent, provider);
+  if (crossModule) return crossModule;
   const semantic = buildSemanticErpSpec(intent, provider);
   if (semantic) return semantic;
   const text = clean(intent);
@@ -50,11 +52,14 @@ export function buildErpSpec(intent: string, provider: ErpReadProvider = demoErp
     } };
   }
   if (/compras?/.test(text) && /por proveedor|proveedores?/.test(text) && !/ordenes?|pedidos?|ultim|recient/.test(text)) {
-    const orders = provider.list("purchaseOrders");
+    const requestedCount = Number(text.match(/\b(?:top|primer[oa]s?|mayores?)\s+(\d{1,2})\b/)?.[1] ?? 0);
+    const orders = [...provider.list("purchaseOrders")].sort((a, b) => Number(b.amount) - Number(a.amount));
+    const selected = requestedCount ? orders.slice(0, requestedCount) : orders;
+    const chartRows = selected.slice(0, requestedCount || 6);
     return { root: "root", state: { erp: { collection: "purchasesBySupplier", source: "demo" } }, elements: {
-      root: { type: "AnalysisGrid", props: { title: "Compras por proveedor", subtitle: "Empresa demo · septiembre 2026 · RD$ · datos simulados" }, children: ["chart", "records"] },
-      chart: { type: "BarChartCard", props: { title: "Seis mayores proveedores", description: "Importe de órdenes de compra de la muestra · nombres completos abajo", data: orders.slice(0, 6).map((row) => ({ name: String(row.supplier).replace(/^(?:Distribuidora|Ferretería|Empaques|Alimentos|Plásticos)\s+(?:(?:del|de|la)\s+)?/, "").replace(/\s+SRL$/, "").slice(0, 13), value: Number(row.amount) })), xKey: "name", series: [{ key: "value", label: "Compras" }], format: "dop", horizontal: true, span: "wide" }, children: [] },
-      records: { type: "DataTable", props: { title: "Detalle por proveedor", description: `${orders.length} proveedores · datos simulados`, data: orders.map((row) => ({ id: row.id, supplier: row.supplier, amount: row.amount, date: row.date, status: row.status })), columns: [{ key: "supplier", label: "Proveedor" }, { key: "id", label: "Orden" }, { key: "date", label: "Fecha" }, { key: "amount", label: "Total", format: "dop" }, { key: "status", label: "Estado" }], currency: "DOP", total: orders.reduce((sum, row) => sum + Number(row.amount), 0), span: "wide" }, children: [] },
+      root: { type: "AnalysisGrid", props: { title: requestedCount ? `Top ${chartRows.length} proveedores por compras` : "Compras por proveedor", subtitle: "Empresa demo · septiembre 2026 · RD$ · datos simulados" }, children: ["chart", "records"] },
+      chart: { type: "BarChartCard", props: { title: requestedCount ? `${chartRows.length} mayores proveedores` : "Seis mayores proveedores", description: "Importe de órdenes de compra de la muestra · nombres completos abajo", data: chartRows.map((row) => ({ name: String(row.supplier).replace(/^(?:Distribuidora|Ferretería|Empaques|Alimentos|Plásticos)\s+(?:(?:del|de|la)\s+)?/, "").replace(/\s+SRL$/, "").slice(0, 13), value: Number(row.amount) })), xKey: "name", series: [{ key: "value", label: "Compras" }], format: "dop", horizontal: true, span: "wide" }, children: [] },
+      records: { type: "DataTable", props: { title: "Detalle por proveedor", description: `${selected.length} proveedores · datos simulados`, data: selected.map((row) => ({ id: row.id, supplier: row.supplier, amount: row.amount, date: row.date, status: row.status })), columns: [{ key: "supplier", label: "Proveedor" }, { key: "id", label: "Orden" }, { key: "date", label: "Fecha" }, { key: "amount", label: "Total", format: "dop" }, { key: "status", label: "Estado" }], currency: "DOP", total: selected.reduce((sum, row) => sum + Number(row.amount), 0), span: "wide" }, children: [] },
     } };
   }
   const query = parseErpIntent(intent);

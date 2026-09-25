@@ -138,7 +138,7 @@ export function BarChartCard({ props }: { props: BaseCardProps & { data: ChartRo
       <ChartContainer config={chartConfig(props.series)} className="chart-standard" aria-label={`${props.title} chart`}>
         <BarChart data={props.data} layout={props.horizontal ? "vertical" : "horizontal"} margin={{ top: 12, right: 10, bottom: 0, left: props.horizontal ? 8 : 0 }}>
           <CartesianGrid vertical={!props.horizontal} horizontal={props.horizontal} stroke="var(--grid-line)" />
-          {props.horizontal ? <YAxis dataKey={props.xKey} type="category" tickLine={false} axisLine={false} width={96} /> : <XAxis dataKey={props.xKey} tickLine={false} axisLine={false} tickMargin={10} />}
+          {props.horizontal ? <YAxis dataKey={props.xKey} type="category" tickLine={false} axisLine={false} width={128} tickFormatter={(value: string) => value.length > 17 ? `${value.slice(0, 16)}…` : value} /> : <XAxis dataKey={props.xKey} tickLine={false} axisLine={false} tickMargin={10} />}
           {props.horizontal ? <XAxis type="number" hide /> : <YAxis tickLine={false} axisLine={false} width={48} tickFormatter={(value) => formatValue(value, firstSeries?.format ?? props.format)} />}
           <ChartTooltip cursor={{ fill: "var(--muted)" }} content={<ChartTooltipContent formatter={(value, name) => formatValue(value, props.series.find((item) => item.label === name)?.format ?? props.format)} />} />
           {props.series.map((series) => <Bar key={series.key} name={series.label} dataKey={series.key} fill={`var(--color-${series.key})`} radius={props.horizontal ? [0, 3, 3, 0] : [3, 3, 0, 0]} maxBarSize={34} isAnimationActive={false} />)}

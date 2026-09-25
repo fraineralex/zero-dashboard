@@ -90,6 +90,7 @@ describe("semantic ERP queries compose the requested UI from related records", (
     expect(validateDynamicErpPlan({ ...plan, source: "purchaseOrders" }, request)).toContain("módulo distinto");
     expect(validateDynamicErpPlan({ ...plan, measures: [{ field: "invented", as: "sales" }] }, request)).toContain("medida");
     expect(validateDynamicErpPlan({ ...plan, view: "bar" }, request)).toContain("tarta");
+    expect(validateDynamicErpPlan({ ...plan, source: "customerInvoices", measures: [{ field: "amount", as: "sales" }], filters: [{ field: "status", op: "eq", value: "Pendiente" }] }, "Gráfico de tarta de facturas por cliente")).toContain("filtro categórico");
     const spec = buildDynamicErpSpec(plan, request);
     expect(spec.elements.chart.type).toBe("PieChartCard");
     const slices = spec.elements.chart.props.data as { value: number }[];
@@ -104,5 +105,28 @@ describe("semantic ERP queries compose the requested UI from related records", (
     const summary = buildDynamicErpSpec({ ...plan, groupBy: null, view: "summary", limit: 2 }, "Suma total de ventas");
     const total = demoErpProvider.list("salesOrders").reduce((sum, row) => sum + Number(row.amount), 0);
     expect(summary.elements.total.props.value).toBe(new Intl.NumberFormat("es-DO", { style: "currency", currency: "DOP", maximumFractionDigits: 0 }).format(total));
+  });
+
+  it.each(["Gráfico de barras de facturas pendientes por cliente", "Facturas por cobrar por cliente en un gráfico de tarta"])("shows only unpaid customer invoices for %s", (request) => {
+    const spec = ask(request);
+    expect(spec.elements.chart.type).toBe(request.includes("tarta") ? "PieChartCard" : "BarChartCard");
+    const rows = spec.elements.records.props.data as { customer: string; amount: number; status: string }[];
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.customer && row.status === "Por cobrar")).toBe(true);
+    const expected = demoErpProvider.list("customerInvoices").filter((row) => row.status === "Por cobrar").reduce((sum, row) => sum + Number(row.amount), 0);
+    expect(rows.reduce((sum, row) => sum + row.amount, 0)).toBe(expected);
+  });
+
+  it("compares payroll cost, purchase orders and sales orders on the same chart and month", () => {
+    const request = "grafico mostrando nomina vs compras vs ventas";
+    const spec = ask(request);
+    expect(spec.elements.chart.type).toBe("BarChartCard");
+    const bars = spec.elements.chart.props.data as { name: string; value: number }[];
+    expect(bars.map((row) => row.name)).toEqual(["Costo de nómina", "Compras", "Ventas"]);
+    expect(bars[0].value).toBe(demoErpProvider.list("payrollRuns").find((row) => row.period === "2026-09")?.employerCost);
+    expect(bars[1].value).toBe(demoErpProvider.list("purchaseOrders").reduce((sum, row) => sum + Number(row.amount), 0));
+    expect(bars[2].value).toBe(demoErpProvider.list("salesOrders").reduce((sum, row) => sum + Number(row.amount), 0));
+    expect((spec.elements.records.props.data as unknown[])).toHaveLength(3);
+    expect(requestFidelityIssue(request, buildErpSpec("Muéstrame la nómina de empleados")!)).toContain("nómina, compras y ventas");
   });
 });

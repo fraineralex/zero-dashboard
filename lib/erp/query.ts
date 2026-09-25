@@ -4,7 +4,7 @@ import type { DashboardElement, DashboardSpec } from "@/types/analytics";
 type FieldFilter = { field: string; op: "eq" | "startsWith"; value: string | number };
 type Measure = { field: string; as: string };
 export type ErpQueryPlan = {
-  purpose: "productSales" | "payrollTaxes" | "payrollMonthly" | "stockZero" | "dynamic";
+  purpose: "productSales" | "payrollTaxes" | "payrollMonthly" | "stockZero" | "pendingInvoices" | "dynamic";
   source: ErpCollection;
   filters: FieldFilter[];
   groupBy?: string;
@@ -31,8 +31,50 @@ const dop = (value: number) => new Intl.NumberFormat("es-DO", { style: "currency
 const element = (type: string, props: Record<string, unknown>): DashboardElement => ({ type, props, children: [] });
 const root = (title: string, subtitle: string, children: string[], layout = "AnalysisGrid"): DashboardElement => ({ type: layout, props: { title, subtitle }, children });
 
+export function isCrossModuleComparison(intent: string): boolean {
+  const text = normalize(intent);
+  return /nomina|payroll|salarios?|sueldos?/.test(text) && /compras?|adquisiciones?/.test(text) && /ventas?|ingresos?/.test(text) && /grafico|grafica|compara|comparacion|versus|\bvs\b/.test(text);
+}
+
+export function buildCrossModuleComparisonSpec(intent: string, provider: ErpReadProvider = demoErpProvider): DashboardSpec | null {
+  if (!isCrossModuleComparison(intent)) return null;
+  const period = "2026-09";
+  const payroll = provider.list("payrollRuns").find((row) => row.period === period);
+  if (!payroll) return null;
+  const purchases = provider.list("purchaseOrders").filter((row) => String(row.date).startsWith(period));
+  const sales = provider.list("salesOrders").filter((row) => String(row.date).startsWith(period));
+  const data = [
+    { name: "Costo de nómina", value: Number(payroll.employerCost), records: 1, basis: "Bruto + aportes patronales", source: "Nómina" },
+    { name: "Compras", value: purchases.reduce((sum, row) => sum + Number(row.amount), 0), records: purchases.length, basis: "Órdenes de compra", source: "Compras" },
+    { name: "Ventas", value: sales.reduce((sum, row) => sum + Number(row.amount), 0), records: sales.length, basis: "Órdenes de venta", source: "Ventas" },
+  ];
+  return { root: "root", state: { erp: { collection: "payrollPurchasesSales", source: "demo", period, measures: data.map(({ name, value }) => ({ name, value })) } }, elements: {
+    root: root("Nómina vs compras vs ventas", "Septiembre 2026 · importes comparables en RD$ · datos simulados", ["chart", "records"]),
+    chart: element("BarChartCard", { title: "Tres magnitudes, un período", description: "Costo empresa de nómina frente a órdenes de compra y de venta · no son flujos de caja", data, xKey: "name", series: [{ key: "value", label: "Importe" }], format: "dop", span: "wide" }),
+    records: element("DataTable", { title: "Qué representa cada barra", description: "Misma moneda y mismo mes; conceptos contables diferentes", data: data.map((row, index) => ({ id: String(index + 1), ...row })), columns: [{ key: "name", label: "Medida" }, { key: "value", label: "Importe", format: "dop" }, { key: "basis", label: "Base de cálculo" }, { key: "records", label: "Registros" }, { key: "source", label: "Módulo" }], currency: "DOP", span: "wide" }),
+  } };
+}
+
+export function crossModuleFidelityIssue(intent: string, spec: DashboardSpec): string | null | undefined {
+  if (!isCrossModuleComparison(intent)) return undefined;
+  const marker = spec.state?.erp as { collection?: string; period?: string; measures?: { name: string; value: number }[] } | undefined;
+  const chart = Object.values(spec.elements).find((block) => block.type === "BarChartCard");
+  const table = Object.values(spec.elements).find((block) => block.type === "DataTable");
+  const data = chart?.props.data as { name: string; value: number }[] | undefined;
+  const rows = table?.props.data as { name: string; value: number }[] | undefined;
+  if (marker?.collection !== "payrollPurchasesSales" || marker.period !== "2026-09" || !chart || !table || data?.length !== 3 || rows?.length !== 3) return "La comparación debe mostrar nómina, compras y ventas del mismo mes.";
+  const expected = buildCrossModuleComparisonSpec(intent)?.state?.erp as { measures?: { name: string; value: number }[] } | undefined;
+  if (!expected?.measures || expected.measures.some((measure) => !data.some((item) => item.name === measure.name && item.value === measure.value) || !rows.some((item) => item.name === measure.name && item.value === measure.value))) return "Una de las tres medidas no coincide con los registros ERP.";
+  return null;
+}
+
 export function planKnownErpQuestion(intent: string): ErpQueryPlan | null {
   const text = normalize(intent);
+  if (/facturas?|cuentas? por cobrar/.test(text) && /pendientes?|por cobrar/.test(text) && /clientes?|usuarios?/.test(text)) return {
+    purpose: "pendingInvoices", source: "customerInvoices", filters: [{ field: "status", op: "eq", value: "Por cobrar" }], groupBy: "customer",
+    measures: [{ field: "amount", as: "amount" }], view: /tarta|pastel|pie|dona|donut|circular/.test(text) ? "pie" : /tabla|lista/.test(text) ? "table" : "bar",
+    limit: Math.min(30, Math.max(1, Number(text.match(/\b(?:top|primer[oa]s?|ultim[oa]s?)\s+(\d{1,2})\b/)?.[1] ?? 30))),
+  };
   const productSales = /\b(productos?|articulos?|items?|skus?)\b/.test(text) && /mas vendidos?|top.*vendid|ventas? por producto|unidades? vendidas?/.test(text);
   if (productSales) return {
     purpose: "productSales", source: "salesLines", filters: [{ field: "date", op: "startsWith", value: "2026-09" }], groupBy: "product",
@@ -116,6 +158,22 @@ export function buildSemanticErpSpec(intent: string, provider: ErpReadProvider =
       records: element("DataTable", { title: "Detalle mes a mes", description: "Aportes patronales separados del salario y del neto", data: runs, columns: [{ key: "period", label: "Mes" }, { key: "gross", label: "Bruto", format: "dop" }, { key: "net", label: "Neto", format: "dop" }, { key: "employerTaxes", label: "Aportes patronales", format: "dop" }, { key: "employerCost", label: "Costo empresa", format: "dop" }], currency: "DOP", span: "wide" }),
     } };
   }
+  if (plan.purpose === "pendingInvoices") {
+    const invoices = provider.list("customerInvoices").filter((row) => row.status === "Por cobrar").sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const grouped = [...queried].sort((a, b) => Number(b.amount) - Number(a.amount));
+    const selected = grouped.slice(0, plan.limit);
+    const chartData = selected.map((row) => ({ name: String(row.customer), value: Number(row.amount) }));
+    const tableRows = invoices.filter((row) => selected.some((item) => item.customer === row.customer));
+    const total = tableRows.reduce((sum, row) => sum + Number(row.amount), 0);
+    const children = plan.view === "table" ? ["records"] : ["chart", "records"];
+    const elements: Record<string, DashboardElement> = {
+      root: root("Facturas pendientes por cliente", "Septiembre 2026 · solo facturas por cobrar · RD$ · datos simulados", children),
+      records: element("DataTable", { title: "Facturas pendientes identificables", description: `${tableRows.length} facturas por cobrar · total ${dop(total)} · muestra demo`, data: tableRows, columns: [{ key: "customer", label: "Cliente" }, { key: "id", label: "Factura" }, { key: "date", label: "Emisión" }, { key: "due", label: "Vencimiento" }, { key: "amount", label: "Pendiente", format: "dop" }, { key: "status", label: "Estado" }], currency: "DOP", total, span: "wide" }),
+    };
+    if (plan.view === "pie") elements.chart = element("PieChartCard", { title: "Deuda por cliente", description: "Distribución del importe pendiente de cobro", data: chartData, nameKey: "name", valueKey: "value", format: "dop", unitLabel: "Pendiente en RD$", span: "wide" });
+    else if (plan.view === "bar") elements.chart = element("BarChartCard", { title: "Deuda por cliente", description: "Facturas por cobrar agrupadas por cliente", data: chartData, xKey: "name", series: [{ key: "value", label: "Pendiente" }], format: "dop", horizontal: true, span: "wide" });
+    return { root: "root", state: { erp: { ...metadata, total, count: invoices.length } }, elements };
+  }
   const stock = queried;
   return { root: "root", state: { erp: { ...metadata, collection: "stock", mode: "zero", count: stock.length } }, elements: {
     root: root("Productos sin stock", "Existencia disponible = 0 · dos almacenes · datos simulados", ["records"], "TableFocus"),
@@ -147,6 +205,12 @@ export function semanticFidelityIssue(intent: string, spec: DashboardSpec): stri
     const rows = find("DataTable")?.props.data as ErpRecord[] | undefined;
     if (!rows || rows.some((row) => row.available !== 0)) return "La vista incluye productos que sí tienen existencias.";
   }
+  if (plan.purpose === "pendingInvoices") {
+    const rows = find("DataTable")?.props.data as ErpRecord[] | undefined;
+    const target = plan.view === "pie" ? "PieChartCard" : plan.view === "bar" ? "BarChartCard" : "DataTable";
+    if (!find(target) || !rows?.length || rows.some((row) => row.status !== "Por cobrar" || !row.customer || !row.id || typeof row.amount !== "number")) return "La vista incluye facturas pagadas o carece de clientes e importes.";
+    if (rows.reduce((sum, row) => sum + Number(row.amount), 0) !== marker.total) return "El importe pendiente no coincide con las facturas visibles.";
+  }
   return null;
 }
 
@@ -177,7 +241,7 @@ export function allowedErpSources(intent: string): ErpCollection[] {
 }
 
 export function shouldPlanDynamicErp(intent: string, prepared: DashboardSpec): boolean {
-  if (planKnownErpQuestion(intent) || !allowedErpSources(intent).length) return false;
+  if (isCrossModuleComparison(intent) || planKnownErpQuestion(intent) || !allowedErpSources(intent).length) return false;
   const preparedKind = (prepared.state?.erp as { collection?: string } | undefined)?.collection;
   if (preparedKind === "salesAndPurchases" || preparedKind === "purchasesBySupplier") return false;
   return /gra[áa]fic|tarta|pastel|pie|barras?|lineas?|líneas?|por (?:cliente|proveedor|producto|almacen|departamento|mes|dia|estado|cuenta)|suma|total|promedio|tendencia|evolucion|evolución|compara|combina/i.test(intent);
@@ -189,6 +253,7 @@ export function validateDynamicErpPlan(plan: DynamicErpPlan, intent: string): st
   const definition = erpFields[plan.source];
   if (plan.groupBy && !definition.dimensions.includes(plan.groupBy)) return "La dimensión solicitada no existe en ese modelo.";
   if (plan.filters.length > 3 || plan.filters.some((filter) => ![...definition.dimensions, ...definition.measures].includes(filter.field) || String(filter.value).length > 50)) return "El filtro no pertenece al modelo seleccionado.";
+  if (plan.filters.some((filter) => ["status", "warehouse", "department", "type"].includes(filter.field) && filter.op === "eq" && !demoErpProvider.list(plan.source).some((row) => row[filter.field] === filter.value))) return "El filtro categórico no coincide con los valores disponibles en el modelo.";
   if (plan.measures.length > 3 || plan.measures.some((measure) => !definition.measures.includes(measure.field) || !/^[a-zA-Z][a-zA-Z0-9]{0,24}$/.test(measure.as))) return "La medida no pertenece al modelo seleccionado.";
   if (plan.limit < 1 || plan.limit > 30 || plan.title.length < 3 || plan.title.length > 70) return "Los límites de la vista no son válidos.";
   if (["pie", "bar", "line"].includes(plan.view) && (!plan.groupBy || !plan.measures.length)) return "El gráfico requiere una dimensión y al menos una medida.";

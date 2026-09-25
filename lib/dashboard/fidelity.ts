@@ -1,6 +1,6 @@
 import { parseCustomerBillingRanking, parseRecentCustomerBilling } from "@/lib/ui-memory/registry";
 import { parseErpIntent } from "@/lib/erp/intent";
-import { dynamicFidelityIssue, semanticFidelityIssue } from "@/lib/erp/query";
+import { crossModuleFidelityIssue, dynamicFidelityIssue, semanticFidelityIssue } from "@/lib/erp/query";
 import type { DashboardElement, DashboardSpec } from "@/types/analytics";
 
 const normalize = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -8,13 +8,23 @@ const rows = (element: DashboardElement | undefined) => Array.isArray(element?.p
 
 export function requestFidelityIssue(intent: string, spec: DashboardSpec): string | null {
   const value = normalize(intent);
+  const crossModuleIssue = crossModuleFidelityIssue(intent, spec);
+  if (crossModuleIssue !== undefined) return crossModuleIssue;
   const semanticIssue = semanticFidelityIssue(intent, spec);
   if (semanticIssue !== undefined) return semanticIssue;
   const dynamicIssue = dynamicFidelityIssue(intent, spec);
   if (dynamicIssue !== undefined) return dynamicIssue;
   if (/estado de resultados|balance general|balance de comprobacion|utilidad neta|flujo de efectivo/.test(value)) return "La muestra ERP no contiene un cierre contable completo; no sería correcto presentar un estado financiero formal.";
   const erp = parseErpIntent(intent);
-  if (!erp && ["salesAndPurchases", "purchasesBySupplier"].includes((spec.state?.erp as { collection?: string } | undefined)?.collection ?? "")) return null;
+  const preparedCollection = (spec.state?.erp as { collection?: string } | undefined)?.collection;
+  if (!erp && preparedCollection === "purchasesBySupplier") {
+    const requestedCount = Number(value.match(/\b(?:top|primer[oa]s?|mayores?)\s+(\d{1,2})\b/)?.[1] ?? 0);
+    const chart = Object.values(spec.elements).find((element) => element.type === "BarChartCard");
+    const records = rows(Object.values(spec.elements).find((element) => element.type === "DataTable"));
+    if (requestedCount && (rows(chart).length !== requestedCount || records.length !== requestedCount)) return `Se pidieron ${requestedCount} proveedores, pero la vista muestra otra cantidad.`;
+    return null;
+  }
+  if (!erp && preparedCollection === "salesAndPurchases") return null;
   if (erp) {
     if (/\b(?:202[0-5]|202[7-9])\b|\b(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|octubre|noviembre|diciembre)\b/.test(value)) return "Los registros ERP simulados cubren solo septiembre de 2026.";
     if (/\b(?:hoy|ayer|today|yesterday|esta semana|semana pasada)\b/.test(value)) return "Los registros ERP simulados no cubren con precisión ese período relativo.";

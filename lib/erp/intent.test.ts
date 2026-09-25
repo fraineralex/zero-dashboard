@@ -61,6 +61,15 @@ describe("ERP request fidelity", () => {
     expect(requestFidelityIssue("Compras por proveedor", result)).toBeNull();
   });
 
+  it("honors an explicit top-three supplier count in both the chart and detail", () => {
+    const request = "Top 3 proveedores por importe de compras";
+    const result = buildErpSpec(request)!;
+    expect(result.elements.root.props.title).toBe("Top 3 proveedores por compras");
+    expect(result.elements.chart.props.data).toHaveLength(3);
+    expect(result.elements.records.props.data).toHaveLength(3);
+    expect(requestFidelityIssue(request, result)).toBeNull();
+  });
+
   it("does not silently replace unavailable count or month", () => {
     const tooMany = "Últimas 20 órdenes de compra a proveedores";
     const pastMonth = "Órdenes de compra a proveedores de agosto";
