@@ -50,14 +50,14 @@ export function useVox(onFinal: (transcript: string) => void) {
     const Constructor = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!Constructor) {
       setSupported(false);
-      setError("Voice recognition is not supported in this browser. Use the command field instead.");
+      setError("Este navegador no admite dictado de voz. Puedes escribir tu consulta.");
       return;
     }
     recognitionRef.current?.abort();
     const recognition = new Constructor();
     recognition.continuous = false;
     recognition.interimResults = true;
-    recognition.lang = "en-US";
+    recognition.lang = "es-DO";
     finalRef.current = "";
     setTranscript("");
     setError(null);
@@ -73,13 +73,13 @@ export function useVox(onFinal: (transcript: string) => void) {
     };
     recognition.onerror = (event) => {
       const messages: Record<string, string> = {
-        "not-allowed": "Microphone access was denied. Typed commands are still available.",
-        "audio-capture": "No microphone was found. Typed commands are still available.",
-        "no-speech": "No speech was detected. Try again when you are ready.",
-        aborted: "Listening canceled.",
-        network: "Voice recognition could not reach the browser speech service.",
+        "not-allowed": "No se permitió usar el micrófono. Puedes escribir tu consulta.",
+        "audio-capture": "No se encontró un micrófono. Puedes escribir tu consulta.",
+        "no-speech": "No se detectó voz. Inténtalo de nuevo.",
+        aborted: "Dictado cancelado.",
+        network: "No se pudo conectar con el servicio de voz del navegador.",
       };
-      if (event.error !== "aborted") setError(messages[event.error] ?? "Voice recognition stopped unexpectedly.");
+      if (event.error !== "aborted") setError(messages[event.error] ?? "El dictado se detuvo inesperadamente.");
     };
     recognition.onend = () => {
       setListening(false);
@@ -92,7 +92,7 @@ export function useVox(onFinal: (transcript: string) => void) {
       recognition.start();
     } catch {
       setListening(false);
-      setError("Voice recognition is already active.");
+      setError("El dictado ya está activo.");
     }
   }, [onFinal]);
 

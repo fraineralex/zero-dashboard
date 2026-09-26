@@ -102,10 +102,10 @@ function CanvasBlock({ id, element, balancedSpan, children }: { id: string; elem
   const duplicateElement = useDashboardStore((state) => state.duplicateElement);
   const span = typeof element.props.span === "string" ? element.props.span : undefined;
   return <div className={cn("canvas-block", span && `span-${span}`, balancedSpan && `balanced-span-${balancedSpan}`, element.type === "MetricCard" && "metric-block", element.type === "ComparisonSummary" && "comparison-summary-block", ["FindingCard", "CustomerHeader"].includes(element.type) && "span-wide")}>
-    <div className="block-controls" aria-label="Block controls">
-      <button onClick={() => resizeElement(id)} title="Change block size" aria-label="Change block size"><MoveHorizontal size={13} /></button>
-      <button onClick={() => duplicateElement(id)} title="Duplicate block" aria-label="Duplicate block"><Copy size={12} /></button>
-      <button onClick={() => removeElement(id)} title="Remove block" aria-label="Remove block"><X size={13} /></button>
+    <div className="block-controls" role="group" aria-label="Controles del bloque">
+      <button onClick={() => resizeElement(id)} title="Cambiar tamaño" aria-label="Cambiar tamaño del bloque"><MoveHorizontal size={13} /></button>
+      <button onClick={() => duplicateElement(id)} title="Duplicar bloque" aria-label="Duplicar bloque"><Copy size={12} /></button>
+      <button onClick={() => removeElement(id)} title="Eliminar bloque" aria-label="Eliminar bloque"><X size={13} /></button>
     </div>
     {children}
   </div>;

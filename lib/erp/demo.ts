@@ -1,6 +1,6 @@
 /** Fictional Dominican company dataset. Replace this provider with authenticated ERP API adapters. */
 export type ErpRecord = Record<string, string | number>;
-export type ErpCollection = "purchaseOrders" | "salesOrders" | "salesLines" | "vendorBills" | "customerInvoices" | "journalEntries" | "stock" | "payroll" | "payrollRuns" | "payrollTaxPayments" | "attendance";
+export type ErpCollection = "purchaseOrders" | "salesOrders" | "salesLines" | "vendorBills" | "customerInvoices" | "creditNotes" | "posTickets" | "expenseEntries" | "journalEntries" | "stock" | "payroll" | "payrollRuns" | "payrollTaxPayments" | "attendance";
 
 export interface ErpReadProvider {
   list(collection: ErpCollection): readonly ErpRecord[];
@@ -11,6 +11,8 @@ const customers = ["Supermercados Colonial", "Farmacia Popular", "Grupo Turísti
 const employees = ["Ana Martínez", "José Rodríguez", "María Pérez", "Carlos Fernández", "Laura Gómez", "Pedro Sánchez", "Isabel Jiménez", "Miguel Torres", "Sofía Castillo", "Daniel Ramírez", "Camila Reyes", "Andrés Núñez"];
 const products = ["Café tostado 1 kg", "Arroz premium 25 lb", "Aceite vegetal 1 gal", "Leche UHT 1 L", "Papel higiénico 12 u", "Detergente 2 kg", "Harina de trigo 5 lb", "Agua mineral 500 ml", "Azúcar crema 5 lb", "Servilletas 200 u", "Habichuelas rojas 1 lb", "Jugo natural 1 L"];
 const date = (index: number) => `2026-09-${String(23 - index).padStart(2, "0")}`;
+export const demoToday = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Santo_Domingo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+const noteDate = (daysBefore: number) => `${demoToday.slice(0, 7)}-${String(Math.max(1, Number(demoToday.slice(-2)) - daysBefore)).padStart(2, "0")}`;
 const salesOrders = customers.map((customer, index) => ({ id: `SO-2026-${String(291 - index).padStart(4, "0")}`, date: date(index), customer, items: 2 + index % 8, amount: 32600 + (11 - index) * 10850, status: ["Por facturar", "Confirmada", "Entregada"][index % 3] }));
 const payroll = employees.map((employee, index) => ({ id: `EMP-${String(101 + index)}`, employee, department: ["Ventas", "Compras", "Contabilidad", "Almacén"][index % 4], gross: 42000 + (11 - index) * 2850, deductions: 3800 + index * 270, net: 38200 + (11 - index) * 2850 - index * 270, status: "Calculada" }));
 const payrollGross = payroll.reduce((sum, row) => sum + row.gross, 0);
@@ -55,7 +57,22 @@ const data: Record<ErpCollection, ErpRecord[]> = {
   salesOrders,
   salesLines,
   vendorBills: suppliers.map((supplier, index) => ({ id: `BILL-2026-${String(88 - index).padStart(4, "0")}`, date: date(index), supplier, due: `2026-10-${String(12 + index).padStart(2, "0")}`, amount: 29400 + (11 - index) * 6410, status: index % 3 === 0 ? "Pagada" : "Pendiente" })),
-  customerInvoices: customers.map((customer, index) => ({ id: `INV-2026-${String(327 - index).padStart(4, "0")}`, date: date(index), customer, due: `2026-10-${String(10 + index).padStart(2, "0")}`, amount: 36500 + (11 - index) * 8840, status: index % 4 === 0 ? "Pagada" : "Por cobrar" })),
+  customerInvoices: [
+    ...customers.map((customer, index) => ({ id: `INV-2026-${String(327 - index).padStart(4, "0")}`, date: date(index), customer, due: `2026-10-${String(10 + index).padStart(2, "0")}`, amount: 36500 + (11 - index) * 8840, status: index % 4 === 0 ? "Pagada" : "Por cobrar" })),
+    ...customers.slice(0, 5).map((customer, index) => ({ id: `INV-DEMO-TODAY-${index + 1}`, date: demoToday, customer, due: demoToday, amount: 18450 + index * 7120, status: "Por cobrar" })),
+  ],
+  creditNotes: [
+    { id: "NC-DEMO-001", date: noteDate(3), customer: customers[0], invoiceId: "INV-2026-0327", amount: 18000, appliedAmount: 18000, remainingAmount: 0, status: "Aplicada" },
+    { id: "NC-DEMO-002", date: noteDate(2), customer: customers[1], invoiceId: "INV-2026-0326", amount: 12500, appliedAmount: 8000, remainingAmount: 4500, status: "Parcial" },
+    { id: "NC-DEMO-003", date: noteDate(1), customer: customers[2], invoiceId: "INV-2026-0325", amount: 9600, appliedAmount: 0, remainingAmount: 9600, status: "Disponible" },
+    { id: "NC-DEMO-004", date: noteDate(0), customer: customers[3], invoiceId: "INV-2026-0324", amount: 7100, appliedAmount: 7100, remainingAmount: 0, status: "Aplicada" },
+  ],
+  posTickets: demoPosTickets,
+  expenseEntries: ["Alquiler", "Servicios", "Logística", "Marketing", "Mantenimiento", "Servicios", "Logística", "Alquiler"].map((category, index) => ({
+    id: `EXP-2026-${String(81 - index).padStart(4, "0")}`, date: date(index), category,
+    description: ["Local comercial", "Electricidad", "Transporte", "Campaña digital", "Equipos", "Internet", "Entregas", "Almacén"][index],
+    amount: 12500 + index * 1750, status: "Registrado",
+  })),
   journalEntries: Array.from({ length: 12 }, (_, index) => {
     const group = Math.floor(index / 2);
     const customerSide = group < 3;

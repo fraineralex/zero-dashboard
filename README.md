@@ -14,24 +14,35 @@ recomposed.
 ```text
 click / suggestion / text / voice
             ↓
-      AnalyticsContext
+  read-only question plan
+  (fast semantic plan or Luna)
             ↓
-     candidate resolver
-   (10–20 configured options)
+  whitelisted ERP fields + period
             ↓
-        Jev decision
+  query execution + fidelity check
             ↓
-      json-render Spec
+  responsive json-render Spec
             ↓
   approved React registry
             ↓
   shadcn-style analytics UI
 ```
 
-Application code owns every value, component, chart, layout, and action. Jev
-selects and arranges configured candidates; it cannot produce JSX, CSS, raw
-HTML, Tailwind classes, or business data. Revenue and explanations are
-calculated before candidate selection.
+Application code owns every value, component, chart, layout, and action. For
+business questions the model may propose a declarative plan, but only the
+server executes whitelisted, read-only fields. It cannot produce JSX, CSS,
+SQL, arbitrary Odoo calls, or business numbers. Known requests use the same
+executor without model latency. The renderer chooses compact metric, chart,
+and record blocks from the approved registry, not a fixed dashboard page.
+
+The ERP provider is currently a **simulated Dominican company**, not a live
+Odoo connection. It includes dated invoices and credit notes so questions
+about today's billing and this month's credit-note consumption can be
+demonstrated without substituting unrelated SaaS MRR. Production use requires
+an authenticated, company-scoped provider for each exposed model plus
+permissions on every queried record. A missing period or unsupported
+operation must produce an explicit unavailable/empty result, never another
+period's numbers.
 
 Top-level navigation and known drill-downs are immediate and deterministic.
 Large analytical changes start a new batched composition. Narrow refinements
@@ -94,10 +105,11 @@ AI_GATEWAY_API_KEY=...
 The Vercel AI Gateway team must allow the `typesafe-ai` provider. There is no
 `OPENAI_API_KEY` requirement and no voice-service API key.
 
-Without an AI Gateway credential, deterministic dashboards, all navigation,
-typed commands, and Vox transcript capture continue to work. The endpoint marks
-this response as `development-fallback` in Developer Mode; it does not silently
-pretend that Jev selected the composition.
+Without an AI Gateway credential, deterministic dashboards, supported typed
+questions, navigation, and Vox transcript capture continue to work. A new
+question that requires Luna planning returns an explicit unavailable response
+until a credential is configured; it does not silently substitute a generic
+dashboard. The endpoint marks that path as `development-fallback`.
 
 ## Deterministic dataset and analytics
 
@@ -110,6 +122,25 @@ The analytics engine derives current and previous revenue, plan/country/segment
 breakdowns, MRR movement, churn, net retention, acquisition conversion, risk,
 loss contributors, and peer comparisons. Jev never receives the raw dataset.
 
+The separate ERP demo provider exposes purchase orders, sales orders/lines,
+invoices, credit notes, POS tickets, expense entries, payroll runs and taxes,
+stock, attendance, and journal entries. `lib/erp/business-question.ts` contains
+the validated query contract, execution, and view composition. ERP questions
+that are not covered by a prepared plan go to a bounded, model-generated query
+plan. Unsupported periods or missing records are explicit rather than replaced
+by SaaS revenue. Adding a real module means registering its read-only
+fields/date semantics, an authorized provider, and request/result fidelity
+cases. Merely adding a component is not sufficient.
+
+The demo is **not connected to Odoo**. Its sample records cannot answer every
+business question. Real deployment needs authenticated, company-scoped Odoo
+adapters; accounting definitions agreed per company; and persistent,
+versioned recipe storage before newly generated recipes can be reused across
+users. The current in-code recipe registry is curated, not a durable shared
+memory. The model creates validated specifications from available fields; it
+does not execute generated JSX, SQL, or arbitrary Odoo RPC.
+See [AUDIT.md](./AUDIT.md) for the verified question matrix and remaining gaps.
+
 ## Vox architecture
 
 Vox uses browser-native `SpeechRecognition` with the
@@ -117,7 +148,7 @@ Vox uses browser-native `SpeechRecognition` with the
 
 - `continuous = false`
 - `interimResults = true`
-- locale `en-US`
+- locale `es-DO`
 - interim results update only the live transcript
 - one final transcript enters the same intent pipeline as typed input
 - cancel calls `abort()` and does not alter the dashboard
@@ -158,7 +189,9 @@ pnpm build
 ```
 
 The logic tests cover deterministic generation, analytics invariants, the exact
-demo context transitions, and candidate-set bounds.
+demo context transitions, candidate-set bounds, payroll growth formulas,
+credit-note reconciliation, today's named invoices, POS grouping, and exact
+ticket limits.
 
 ## Demo flow
 

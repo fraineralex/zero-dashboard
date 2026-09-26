@@ -1,6 +1,7 @@
 import { demoErpProvider, demoPosTickets, type ErpCollection, type ErpRecord, type ErpReadProvider } from "@/lib/erp/demo";
 import { buildCrossModuleComparisonSpec, buildSemanticErpSpec } from "@/lib/erp/query";
 import { buildFlexibleComparisonSpec } from "@/lib/erp/comparison";
+import { buildBusinessSpec, planBusinessQuestion } from "@/lib/erp/business-question";
 import type { DashboardSpec } from "@/types/analytics";
 
 const clean = (text: string) => text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -11,6 +12,9 @@ const columns: Record<ErpCollection, Column[]> = {
   salesLines: [{ key: "product", label: "Producto" }, { key: "quantity", label: "Unidades" }, { key: "subtotal", label: "Venta", format: "dop" }, { key: "orderId", label: "Orden" }],
   vendorBills: [{ key: "id", label: "Factura" }, { key: "supplier", label: "Proveedor" }, { key: "date", label: "Emisión" }, { key: "due", label: "Vencimiento" }, { key: "amount", label: "Importe", format: "dop" }, { key: "status", label: "Estado" }],
   customerInvoices: [{ key: "id", label: "Factura" }, { key: "customer", label: "Cliente" }, { key: "date", label: "Emisión" }, { key: "due", label: "Vencimiento" }, { key: "amount", label: "Importe", format: "dop" }, { key: "status", label: "Estado" }],
+  creditNotes: [{ key: "id", label: "Nota" }, { key: "date", label: "Fecha" }, { key: "customer", label: "Cliente" }, { key: "amount", label: "Emitido", format: "dop" }, { key: "appliedAmount", label: "Aplicado", format: "dop" }, { key: "remainingAmount", label: "Disponible", format: "dop" }],
+  posTickets: [{ key: "id", label: "Ticket" }, { key: "date", label: "Fecha" }, { key: "register", label: "Caja" }, { key: "paymentMethod", label: "Pago" }, { key: "amount", label: "Cobrado", format: "dop" }],
+  expenseEntries: [{ key: "id", label: "Registro" }, { key: "date", label: "Fecha" }, { key: "category", label: "Categoría" }, { key: "description", label: "Concepto" }, { key: "amount", label: "Importe", format: "dop" }],
   journalEntries: [{ key: "id", label: "Asiento" }, { key: "date", label: "Fecha" }, { key: "reference", label: "Referencia" }, { key: "account", label: "Cuenta" }, { key: "debit", label: "Débito", format: "dop" }, { key: "credit", label: "Crédito", format: "dop" }],
   stock: [{ key: "id", label: "SKU" }, { key: "product", label: "Producto" }, { key: "warehouse", label: "Almacén" }, { key: "available", label: "Disponible" }, { key: "minimum", label: "Mínimo" }, { key: "status", label: "Estado" }],
   payroll: [{ key: "id", label: "Empleado" }, { key: "employee", label: "Nombre" }, { key: "department", label: "Departamento" }, { key: "gross", label: "Bruto", format: "dop" }, { key: "deductions", label: "Descuentos", format: "dop" }, { key: "net", label: "Neto", format: "dop" }],
@@ -18,7 +22,7 @@ const columns: Record<ErpCollection, Column[]> = {
   payrollTaxPayments: [{ key: "id", label: "Pago" }, { key: "date", label: "Fecha" }, { key: "type", label: "Concepto" }, { key: "amount", label: "Pagado", format: "dop" }, { key: "status", label: "Estado" }],
   attendance: [{ key: "date", label: "Fecha" }, { key: "employee", label: "Empleado" }, { key: "department", label: "Departamento" }, { key: "checkIn", label: "Entrada" }, { key: "checkOut", label: "Salida" }, { key: "status", label: "Estado" }],
 };
-const labels: Record<ErpCollection, string> = { purchaseOrders: "órdenes de compra a proveedores", salesOrders: "órdenes de venta", salesLines: "líneas de venta", vendorBills: "facturas de proveedores", customerInvoices: "facturas de clientes", journalEntries: "asientos contables", stock: "productos en inventario", payroll: "registros de nómina", payrollRuns: "nóminas mensuales", payrollTaxPayments: "pagos patronales", attendance: "registros de asistencia" };
+const labels: Record<ErpCollection, string> = { purchaseOrders: "órdenes de compra a proveedores", salesOrders: "órdenes de venta", salesLines: "líneas de venta", vendorBills: "facturas de proveedores", customerInvoices: "facturas de clientes", creditNotes: "notas de crédito", posTickets: "tickets POS", expenseEntries: "gastos registrados", journalEntries: "asientos contables", stock: "productos en inventario", payroll: "registros de nómina", payrollRuns: "nóminas mensuales", payrollTaxPayments: "pagos patronales", attendance: "registros de asistencia" };
 
 export function parseErpIntent(intent: string): { collection: ErpCollection; count: number; mode: "latest" | "largest" | "low" | "zero" | "all" } | null {
   const text = clean(intent);
@@ -38,6 +42,8 @@ export function parseErpIntent(intent: string): { collection: ErpCollection; cou
 }
 
 export function buildErpSpec(intent: string, provider: ErpReadProvider = demoErpProvider): DashboardSpec | null {
+  const businessPlan = planBusinessQuestion(intent);
+  if (businessPlan) return buildBusinessSpec(businessPlan, provider);
   const crossModule = buildCrossModuleComparisonSpec(intent, provider);
   if (crossModule) return crossModule;
   const flexibleComparison = buildFlexibleComparisonSpec(intent, provider);

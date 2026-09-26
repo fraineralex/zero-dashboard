@@ -1,6 +1,7 @@
 import { analytics } from "@/lib/analytics/engine";
 import { buildUiMemorySpec } from "@/lib/ui-memory/registry";
 import { buildErpSpec } from "@/lib/erp/intent";
+import { buildBusinessSpec, planBusinessQuestion } from "@/lib/erp/business-question";
 import { demoErpProvider } from "@/lib/erp/demo";
 import type { AnalyticsContext, DashboardElement, DashboardSpec } from "@/types/analytics";
 
@@ -290,6 +291,8 @@ function accountingIntentSpec(intent: string, normalized: string): DashboardSpec
 }
 
 export function buildIntentSpec(intent: string, context: AnalyticsContext, initialSpec?: DashboardSpec): DashboardSpec {
+  const businessPlan = planBusinessQuestion(intent);
+  if (businessPlan) return buildBusinessSpec(businessPlan);
   const erpSpec = buildErpSpec(intent);
   if (erpSpec) return erpSpec;
   const normalized = normalizeIntent(intent);

@@ -8,8 +8,8 @@ import { requestFidelityIssue, unavailableSpec } from "@/lib/dashboard/fidelity"
 import { composeWithLuna } from "@/lib/dashboard/luna-composer";
 import { resolveCandidates } from "@/lib/dashboard/candidates";
 import { buildIntentSpec } from "@/lib/dashboard/specs";
-import { buildDynamicErpSpec, shouldPlanDynamicErp } from "@/lib/erp/query";
-import { planErpWithLuna } from "@/lib/erp/luna-planner";
+import { buildBusinessSpec } from "@/lib/erp/business-question";
+import { planBusinessWithLuna, shouldPlanBusinessWithLuna } from "@/lib/erp/luna-business-planner";
 import { deterministicCapabilityDecision, evaluateCapabilityDecision } from "@/lib/ui-memory/decision";
 import { findUiRecipe } from "@/lib/ui-memory/registry";
 import type { AnalyticsContext, DashboardSpec } from "@/types/analytics";
@@ -36,6 +36,10 @@ const windows = new Map<string, { count: number; resetAt: number }>();
 
 function rateLimited(key: string) {
   const now = Date.now();
+  if (windows.size > 5_000) {
+    for (const [candidate, window] of windows) if (window.resetAt < now) windows.delete(candidate);
+    if (windows.size > 5_000) windows.delete(windows.keys().next().value!);
+  }
   const existing = windows.get(key);
   if (!existing || existing.resetAt < now) {
     windows.set(key, { count: 1, resetAt: now + 60_000 });
@@ -62,22 +66,25 @@ function logCompositionFailure(stage: string, error: unknown) {
 }
 
 export async function POST(request: Request) {
-  const clientKey = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
-  if (rateLimited(clientKey)) return Response.json({ error: "Too many composition requests. Try again shortly." }, { status: 429 });
+  const clientKey = (request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local").slice(0, 80);
+  if (rateLimited(clientKey)) return Response.json({ error: "Demasiadas consultas en un minuto. Inténtalo de nuevo en unos segundos." }, { status: 429 });
 
   let payload: z.infer<typeof requestSchema>;
   try {
-    payload = requestSchema.parse(await request.json());
+    const raw = await request.text();
+    if (raw.length > 64_000) return Response.json({ error: "La consulta supera el tamaño permitido." }, { status: 413 });
+    payload = requestSchema.parse(JSON.parse(raw));
+    if (payload.initialSpec && (Object.keys(payload.initialSpec.elements ?? {}).length > 40 || !dashboardCatalog.validate(payload.initialSpec).success)) payload.initialSpec = undefined;
   } catch {
-    return Response.json({ error: "Invalid composition request." }, { status: 400 });
+    return Response.json({ error: "La consulta no es válida. Revísala e inténtalo de nuevo." }, { status: 400 });
   }
 
   const context = payload.context as AnalyticsContext;
   const resolved = resolveCandidates(context, payload.intent);
   const prepared = buildIntentSpec(payload.intent, context, payload.initialSpec);
-  const preparedErp = Boolean(prepared.state?.erp);
-  const dynamicErp = payload.source !== "navigation" && shouldPlanDynamicErp(payload.intent, prepared);
+  const preparedErp = Boolean(prepared.state?.erp || prepared.state?.business);
   const fidelityIssue = payload.source === "navigation" ? null : requestFidelityIssue(payload.intent, prepared);
+  const dynamicBusiness = payload.source !== "navigation" && !prepared.state?.business && (!preparedErp || Boolean(fidelityIssue)) && shouldPlanBusinessWithLuna(payload.intent);
   const fallback = fidelityIssue ? unavailableSpec(fidelityIssue) : prepared;
   const memoryRecipe = findUiRecipe(payload.intent);
   // Vercel injects runtime OIDC into the function Request, not process.env.
@@ -91,6 +98,45 @@ export async function POST(request: Request) {
       const focusedBilling = memoryRecipe?.id === "customer-billing-ranking" || memoryRecipe?.id === "recent-customer-billing";
       const explicitPie = Object.values(fallback.elements).some((element) => element.type === "PieChartCard");
       const comparison = (prepared.state?.erp as { collection?: string } | undefined)?.collection === "moduleComparison";
+      if (dynamicBusiness) {
+        let uiMemory = deterministicCapabilityDecision(memoryRecipe);
+        if (!apiKey) {
+          const unavailable = unavailableSpec("Esta pregunta requiere planificación semántica y el modelo no está configurado en este entorno.");
+          send({ type: "step", spec: unavailable, diagnostics: { mode: "development-fallback", stopReason: "business-planner-unavailable", uiMemory } });
+          send({ type: "complete", spec: unavailable });
+          controller.close();
+          return;
+        }
+        try {
+          const [plan, decision] = await Promise.all([
+            planBusinessWithLuna(payload.intent, AbortSignal.timeout(12_000)),
+            (async () => {
+              try {
+                const evaluate = experimental_createEvaluator({ model: "typesafe-ai/jev", apiKey, timeoutMs: 10_000 });
+                return await evaluateCapabilityDecision(payload.intent, memoryRecipe, evaluate, AbortSignal.timeout(4_500));
+              } catch (error) {
+                logCompositionFailure("jev-business-preflight", error);
+                return uiMemory;
+              }
+            })(),
+          ]);
+          uiMemory = decision;
+          const generated = buildBusinessSpec(plan);
+          const issue = validateCanvasDesign(generated) ?? requestFidelityIssue(payload.intent, generated);
+          const catalogResult = dashboardCatalog.validate(generated);
+          if (issue || !catalogResult.success) throw new Error(issue ?? "Generated business view failed catalog validation.");
+          send({ type: "step", spec: generated, diagnostics: { mode: "luna", stopReason: "validated-business-query-plan", uiMemory } });
+          send({ type: "complete", spec: generated });
+        } catch (error) {
+          logCompositionFailure("luna-business-planning", error);
+          const unavailable = unavailableSpec("No pude verificar la fuente, el cálculo, el período y la visualización solicitados con los registros disponibles.");
+          send({ type: "step", spec: unavailable, diagnostics: { mode: "deterministic", stopReason: "business-query-plan-rejected", uiMemory } });
+          send({ type: "complete", spec: unavailable });
+        } finally {
+          controller.close();
+        }
+        return;
+      }
       if (comparison) {
         if (fidelityIssue) {
           send({ type: "step", spec: fallback, diagnostics: { mode: "deterministic", stopReason: "comparison-data-unavailable" } });
@@ -121,39 +167,6 @@ export async function POST(request: Request) {
         send({ type: "step", spec: prepared, diagnostics: { mode: "deterministic", stopReason: apiKey ? "validated-comparison-fallback" : "comparison-model-unavailable", uiMemory } });
         send({ type: "complete", spec: prepared });
         controller.close();
-        return;
-      }
-      if (dynamicErp) {
-        if (!apiKey) {
-          const unavailable = unavailableSpec("La planificación de esta consulta ERP requiere el modelo de composición, que no está configurado en este entorno.");
-          send({ type: "step", spec: unavailable, diagnostics: { mode: "development-fallback", stopReason: "erp-planner-unavailable" } });
-          send({ type: "complete", spec: unavailable });
-          controller.close();
-          return;
-        }
-        let uiMemory = deterministicCapabilityDecision(memoryRecipe);
-        try {
-          const evaluate = experimental_createEvaluator({ model: "typesafe-ai/jev", apiKey, timeoutMs: 10_000 });
-          uiMemory = await evaluateCapabilityDecision(payload.intent, memoryRecipe, evaluate, AbortSignal.timeout(4_500));
-        } catch (error) {
-          logCompositionFailure("jev-erp-preflight", error);
-        }
-        try {
-          const plan = await planErpWithLuna(payload.intent, AbortSignal.timeout(12_000));
-          const generated = buildDynamicErpSpec(plan, payload.intent);
-          const issue = validateCanvasDesign(generated) ?? requestFidelityIssue(payload.intent, generated);
-          const catalogResult = dashboardCatalog.validate(generated);
-          if (issue || !catalogResult.success) throw new Error(issue ?? "Generated ERP spec failed catalog validation.");
-          send({ type: "step", spec: generated, diagnostics: { mode: "luna", stopReason: "validated-erp-query-plan", uiMemory } });
-          send({ type: "complete", spec: generated });
-        } catch (error) {
-          logCompositionFailure("luna-erp-planning", error);
-          const unavailable = unavailableSpec("No pude componer esta consulta con los modelos y campos de la muestra ERP. No se sustituyó por datos de otro módulo.");
-          send({ type: "step", spec: unavailable, diagnostics: { mode: "deterministic", stopReason: "erp-query-plan-rejected", uiMemory } });
-          send({ type: "complete", spec: unavailable });
-        } finally {
-          controller.close();
-        }
         return;
       }
       if (fidelityIssue || focusedBilling || explicitPie || preparedErp || !apiKey) {

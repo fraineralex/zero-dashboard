@@ -1,14 +1,18 @@
 import { parseCustomerBillingRanking, parseRecentCustomerBilling } from "@/lib/ui-memory/registry";
 import { parseErpIntent } from "@/lib/erp/intent";
+import { businessFidelityIssue } from "@/lib/erp/business-question";
 import { crossModuleFidelityIssue, dynamicFidelityIssue, semanticFidelityIssue } from "@/lib/erp/query";
 import { flexibleComparisonFidelityIssue } from "@/lib/erp/comparison";
+import { normalizeErpQuestion } from "@/lib/erp/question-language";
 import type { DashboardElement, DashboardSpec } from "@/types/analytics";
 
-const normalize = (value: string) => value.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const normalize = normalizeErpQuestion;
 const rows = (element: DashboardElement | undefined) => Array.isArray(element?.props.data) ? element.props.data as Record<string, unknown>[] : [];
 
 export function requestFidelityIssue(intent: string, spec: DashboardSpec): string | null {
   const value = normalize(intent);
+  const businessIssue = businessFidelityIssue(intent, spec);
+  if (businessIssue !== undefined) return businessIssue;
   const crossModuleIssue = crossModuleFidelityIssue(intent, spec);
   if (crossModuleIssue !== undefined) return crossModuleIssue;
   const flexibleIssue = flexibleComparisonFidelityIssue(intent, spec);
@@ -42,6 +46,10 @@ export function requestFidelityIssue(intent: string, spec: DashboardSpec): strin
     const records = rows(table);
     if (metadata?.collection !== erp.collection || !table) return "La respuesta no corresponde al módulo ERP solicitado.";
     if (records.length !== (erp.mode === "low" ? records.length : erp.count)) return `Se solicitaron ${erp.count} registros y la vista muestra otra cantidad.`;
+    if (/grafic[oa]|visualizacion/.test(value) && !Object.values(spec.elements).some((element) => ["PieChartCard", "BarChartCard", "LineChartCard", "AreaChartCard", "ComparisonChart"].includes(element.type))) return "Se pidió un gráfico, pero la vista solo muestra una tabla.";
+    if (/\b(?:tarta|pastel|pie|donut|dona)\b|grafico circular/.test(value) && !Object.values(spec.elements).some((element) => element.type === "PieChartCard")) return "Se pidió un gráfico de tarta, pero la vista solo muestra registros.";
+    if (/grafic[oa].*barras?|barras?.*grafic[oa]/.test(value) && !Object.values(spec.elements).some((element) => element.type === "BarChartCard")) return "Se pidió un gráfico de barras, pero la vista solo muestra registros.";
+    if (/grafic[oa].*lineas?|lineas?.*grafic[oa]|tendencia|evolucion/.test(value) && !Object.values(spec.elements).some((element) => element.type === "LineChartCard")) return "Se pidió una evolución temporal, pero la vista solo muestra registros.";
     if (erp.collection === "purchaseOrders" && records.some((row) => !row.supplier || !row.id || !row.date || typeof row.amount !== "number")) return "Faltan proveedor, orden, fecha o importe de compra.";
     if (erp.collection === "journalEntries" && records.some((row) => !row.account || !row.reference || typeof row.debit !== "number" || typeof row.credit !== "number")) return "Faltan cuenta, referencia, débito o crédito en el libro diario.";
     return null;

@@ -127,7 +127,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         body: JSON.stringify({ intent: trimmed, context: nextContext, source, initialSpec: previous.spec }),
         signal: controller.signal,
       });
-      if (!response.ok || !response.body) throw new Error("Composition service is unavailable.");
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(detail?.error ?? "El servicio de análisis no está disponible ahora.");
+      }
+      if (!response.body) throw new Error("El servicio no devolvió una respuesta.");
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -148,7 +152,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
             set((state) => ({ spec: latestSpec, context: nextContext, revision: state.revision + 1, lastIntent: trimmed }));
           }
           if (event.diagnostics) latestDiagnostics = { ...latestDiagnostics, ...event.diagnostics };
-          if (event.type === "error") throw new Error(event.message ?? "Composition failed.");
+          if (event.type === "error") throw new Error(event.message ?? "No se pudo construir la vista.");
         }
       }
       const finishedAt = performance.now();
@@ -177,7 +181,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         set({ status: "idle", abortController: null });
         return;
       }
-      set({ status: "error", error: error instanceof Error ? error.message : "Composition failed.", abortController: null });
+      set({ status: "error", error: error instanceof Error ? error.message : "No se pudo construir la vista.", abortController: null });
     }
   },
   cancelComposition: () => {

@@ -46,7 +46,9 @@ describe("request fidelity", () => {
   ])("keeps amount rankings distinct from recency in %s", (intent, count) => {
     const spec = compose(intent);
     expect(Object.values(spec.elements).some((element) => element.type === "BillingLedger")).toBe(false);
-    expect((Object.values(spec.elements).find((element) => element.type === "CustomerRanking")?.props.data as unknown[])).toHaveLength(count);
+    const ranked = Object.values(spec.elements).find((element) => element.type === "CustomerRanking" || element.type === "DataTable");
+    expect(ranked?.props.data as unknown[]).toHaveLength(count);
+    if (intent.includes("este mes")) expect(spec.state?.business).toBeTruthy();
     expect(requestFidelityIssue(intent, spec)).toBeNull();
   });
 
