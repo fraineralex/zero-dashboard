@@ -15,7 +15,7 @@ import { findUiRecipe } from "@/lib/ui-memory/registry";
 import type { AnalyticsContext, DashboardSpec } from "@/types/analytics";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 45;
 
 const requestSchema = z.object({
   intent: z.string().trim().min(1).max(500),
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
         }
         try {
           const [plan, decision] = await Promise.all([
-            planBusinessWithLuna(payload.intent, AbortSignal.timeout(12_000)),
+            planBusinessWithLuna(payload.intent, AbortSignal.timeout(24_000)),
             (async () => {
               try {
                 const evaluate = experimental_createEvaluator({ model: "typesafe-ai/jev", apiKey, timeoutMs: 10_000 });

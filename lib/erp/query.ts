@@ -20,7 +20,7 @@ export const erpFields: Record<ErpCollection, { dimensions: string[]; measures: 
   vendorBills: { dimensions: ["id", "date", "supplier", "due", "status"], measures: ["amount"] },
   customerInvoices: { dimensions: ["id", "date", "customer", "due", "status"], measures: ["amount"] },
   creditNotes: { dimensions: ["id", "date", "customer", "invoiceId", "status"], measures: ["amount", "appliedAmount", "remainingAmount"] },
-  posTickets: { dimensions: ["id", "date", "register", "paymentMethod", "status"], measures: ["amount", "items"] },
+  posTickets: { dimensions: ["id", "date", "soldAt", "cashier", "register", "paymentMethod", "status"], measures: ["amount", "items"] },
   expenseEntries: { dimensions: ["id", "date", "category", "description", "status"], measures: ["amount"] },
   journalEntries: { dimensions: ["id", "date", "reference", "account"], measures: ["debit", "credit"] },
   payrollTaxPayments: { dimensions: ["period", "type", "date", "status"], measures: ["amount"] },

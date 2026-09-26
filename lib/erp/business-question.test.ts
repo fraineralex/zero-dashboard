@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBusinessSpec, businessFidelityIssue, executeBusinessPlan, planBusinessQuestion } from "@/lib/erp/business-question";
+import { buildBusinessSpec, businessFidelityIssue, executeBusinessPlan, planBusinessQuestion, requestedDateRange, requestedTimeRange, validateBusinessPlan } from "@/lib/erp/business-question";
 import { demoErpProvider, demoToday } from "@/lib/erp/demo";
 import { buildErpSpec } from "@/lib/erp/intent";
 import { requestFidelityIssue } from "@/lib/dashboard/fidelity";
@@ -7,6 +7,33 @@ import { dashboardCatalog } from "@/lib/dashboard/catalog";
 import { validateCanvasDesign } from "@/lib/dashboard/design-system";
 
 describe("business questions preserve measures, scope and supporting records", () => {
+  it("identifies cashiers and ranks their POS collections instead of showing invoices", () => {
+    const intent = "Cajera que mas factura respecto a las demas";
+    const plan = planBusinessQuestion(intent)!;
+    expect(plan).toMatchObject({ source: "posTickets", groupBy: "cashier", view: "bar" });
+    const spec = buildBusinessSpec(plan);
+    expect(requestFidelityIssue(intent, spec)).toBeNull();
+    const detail = Object.values(spec.elements).find((element) => element.type === "DataTable")!;
+    const records = detail.props.data as Record<string, unknown>[];
+    expect(records.map((row) => row.cashier)).toEqual(["Ana Martínez", "Laura Gómez", "Sofía Castillo"]);
+    expect(records.every((row) => typeof row.share === "number" && Number(row.amount) > 0)).toBe(true);
+    expect(requestFidelityIssue(intent, buildErpSpec("facturas de clientes")!)).toContain("cajeras");
+  });
+
+  it("filters last-hour sales by receipt timestamp and shows identifiable evidence", () => {
+    const intent = "ventas de la ultima hora";
+    const range = requestedTimeRange(intent)!;
+    expect(new Date(range.to).getTime() - new Date(range.from).getTime()).toBe(3_600_000);
+    const plan = planBusinessQuestion(intent)!;
+    expect(plan).toMatchObject({ source: "posTickets", timeRange: range, view: "summary" });
+    const spec = buildBusinessSpec(plan);
+    expect(requestFidelityIssue(intent, spec)).toBeNull();
+    const detail = Object.values(spec.elements).find((element) => element.type === "DataTable")!;
+    const records = detail.props.data as Record<string, unknown>[];
+    expect(records).toHaveLength(4);
+    expect(records.every((row) => String(row.soldAt) >= range.from && String(row.soldAt) <= range.to && row.cashier && row.soldAtLocal)).toBe(true);
+    expect(requestFidelityIssue(intent, buildErpSpec("facturas de clientes")!)).toContain("hora exacta");
+  });
   it.each([
     "porcentage de crecimiento de nomina del mes anterior respecto al mes actual",
     "Porcentaje de crecimiento de nómina del mes pasado al actual",
@@ -89,6 +116,17 @@ describe("business questions preserve measures, scope and supporting records", (
     const selectedTotal = (spec.elements.records.props.data as { amount: number }[]).reduce((sum, row) => sum + row.amount, 0);
     expect(spec.elements.metric0.props.value).toBe(new Intl.NumberFormat("es-DO", { style: "currency", currency: "DOP", maximumFractionDigits: 0 }).format(selectedTotal));
     expect(businessFidelityIssue(intent, spec)).toBeNull();
+  });
+
+  it("does not confuse a seven-day average ticket with seven recent ticket rows", () => {
+    const intent = "Cuál fue el ticket promedio del punto de venta durante los últimos 7 días";
+    const plan = planBusinessQuestion(intent)!;
+    expect(plan).toMatchObject({ source: "posTickets", period: "all", view: "summary", measures: [{ field: "amount", aggregation: "average" }] });
+    const spec = buildBusinessSpec(plan);
+    expect(spec.elements.metric0.props.label).toBe("Ticket promedio");
+    expect((spec.elements.records.props.data as { date: string }[]).every((row) => row.date >= plan.dateRange!.from && row.date <= plan.dateRange!.to)).toBe(true);
+    expect(requestFidelityIssue(intent, spec)).toBeNull();
+    expect(requestFidelityIssue(intent, buildErpSpec("punto de venta")!)).toContain("rango de fechas");
   });
 
   it("ranks invoices issued this month, not recurring SaaS revenue", () => {
@@ -221,5 +259,56 @@ describe("business questions preserve measures, scope and supporting records", (
     const total = demoErpProvider.list("payroll").reduce((sum, row) => sum + Number(row.net), 0);
     expect((spec.elements.chart.props.data as { value: number }[]).reduce((sum, row) => sum + row.value, 0)).toBe(total);
     expect(requestFidelityIssue(intent, spec)).toBeNull();
+  });
+
+  it("computes averages from the matching rows instead of presenting a sum", () => {
+    const plan = { source: "posTickets" as const, period: "all" as const, measures: [{ field: "amount", label: "Ticket promedio", aggregation: "average" as const }], view: "summary" as const, limit: 12, title: "Ticket promedio POS" };
+    const tickets = demoErpProvider.list("posTickets");
+    const expected = tickets.reduce((sum, row) => sum + Number(row.amount), 0) / tickets.length;
+    expect(executeBusinessPlan(plan).totals.amount).toBe(expected);
+    expect(buildBusinessSpec(plan).elements.metric0.props.value).toBe(new Intl.NumberFormat("es-DO", { style: "currency", currency: "DOP", maximumFractionDigits: 0 }).format(expected));
+    expect(validateBusinessPlan({ ...plan, view: "pie", groupBy: "register" })).toContain("aditivo");
+  });
+
+  it("counts distinct customers without multiplying repeated invoices", () => {
+    const plan = { source: "customerInvoices" as const, period: "all" as const, measures: [{ field: "customer", label: "Clientes distintos", aggregation: "distinctCount" as const }], view: "summary" as const, limit: 30, title: "Clientes facturados" };
+    expect(executeBusinessPlan(plan).totals.customer).toBe(new Set(demoErpProvider.list("customerInvoices").map((row) => row.customer)).size);
+    expect(validateBusinessPlan(plan)).toBeNull();
+  });
+
+  it("interprets 'empleados diferentes' as distinct people, not recent attendance rows", () => {
+    const intent = "¿Cuántos empleados diferentes han marcado asistencia?";
+    const plan = planBusinessQuestion(intent)!;
+    expect(plan).toMatchObject({ source: "attendance", view: "summary", measures: [{ field: "employee", aggregation: "distinctCount" }] });
+    const spec = buildBusinessSpec(plan);
+    expect(spec.elements.metric0.props.value).toBe(String(new Set(demoErpProvider.list("attendance").map((row) => row.employee)).size));
+    expect(requestFidelityIssue(intent, spec)).toBeNull();
+    expect(requestFidelityIssue(intent, buildErpSpec("asistencia")!)).toContain("entidades distintas");
+  });
+
+  it("applies relative day ranges to dated records and rejects undated employee payroll", () => {
+    const range = requestedDateRange("ventas de los últimos 7 días", demoToday)!;
+    const plan = { source: "posTickets" as const, period: "all" as const, dateRange: range, measures: [{ field: "amount", label: "Ventas cobradas" }], view: "summary" as const, limit: 30, title: "Ventas POS últimos siete días" };
+    const expected = demoErpProvider.list("posTickets").filter((row) => String(row.date) >= range.from && String(row.date) <= range.to);
+    expect(executeBusinessPlan(plan).rows).toEqual(expected);
+    expect(buildBusinessSpec(plan).elements.root.props.subtitle).toContain(`${range.from} – ${range.to}`);
+    expect(validateBusinessPlan({ ...plan, source: "payroll" })).toContain("rango de fechas");
+  });
+
+  it("derives explicit dates and named-month ranges without inventing a period", () => {
+    expect(requestedDateRange("Ventas del 3 al 12 de septiembre de 2026")).toEqual({ from: "2026-09-03", to: "2026-09-12" });
+    expect(requestedDateRange("Compras de febrero de 2026")).toEqual({ from: "2026-02-01", to: "2026-02-28" });
+    expect(requestedDateRange("Ventas entre 2026-09-18 y 2026-09-23")).toEqual({ from: "2026-09-18", to: "2026-09-23" });
+  });
+
+  it("assembles two same-unit measures in one generated chart and backing table", () => {
+    const plan = { source: "payrollRuns" as const, period: "all" as const, groupBy: "period", measures: [{ field: "gross", label: "Nómina bruta" }, { field: "net", label: "Nómina neta" }], view: "line" as const, limit: 12, title: "Evolución de nómina bruta y neta" };
+    expect(validateBusinessPlan(plan)).toBeNull();
+    const spec = buildBusinessSpec(plan);
+    expect(spec.elements.chart.type).toBe("LineChartCard");
+    expect(spec.elements.chart.props.series).toEqual([{ key: "gross", label: "Nómina bruta", format: "dop" }, { key: "net", label: "Nómina neta", format: "dop" }]);
+    expect(spec.elements.records.props.columns).toEqual(expect.arrayContaining([{ key: "gross", label: "Nómina bruta", format: "dop" }, { key: "net", label: "Nómina neta", format: "dop" }]));
+    expect(dashboardCatalog.validate(spec).success).toBe(true);
+    expect(validateBusinessPlan({ ...plan, source: "salesLines", groupBy: "product", measures: [{ field: "subtotal", label: "Ventas" }, { field: "quantity", label: "Unidades" }], view: "bar" })).toContain("mezclar importes y conteos");
   });
 });

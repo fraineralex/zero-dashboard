@@ -46,11 +46,23 @@ export const demoPosTickets = Array.from({ length: 12 }, (_, index) => ({
   id: `POS-2026-${String(912 - index).padStart(4, "0")}`,
   date: date(index),
   register: ["Caja principal", "Caja tienda", "Caja sucursal"][index % 3],
+  cashier: ["Ana Martínez", "Laura Gómez", "Sofía Castillo"][index % 3],
   paymentMethod: ["Tarjeta", "Efectivo", "Transferencia"][index % 3],
   items: 1 + index % 5,
   amount: 1840 + (11 - index) * 415 + (index % 3) * 230,
   status: "Pagado",
 }));
+
+/** Live-looking demo receipts; timestamps are simulated, never presented as real transactions. */
+function currentPosTickets(): ErpRecord[] {
+  const now = Math.floor(Date.now() / 60_000) * 60_000;
+  return demoPosTickets.map((ticket, index) => {
+    if (index >= 4) return ticket;
+    const instant = new Date(now - [5, 15, 27, 40][index] * 60_000);
+    const local = new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Santo_Domingo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(instant);
+    return { ...ticket, date: local.slice(0, 10), soldAt: instant.toISOString(), soldAtLocal: local.slice(11) };
+  });
+}
 
 const data: Record<ErpCollection, ErpRecord[]> = {
   purchaseOrders: suppliers.map((supplier, index) => ({ id: `PO-2026-${String(147 - index).padStart(4, "0")}`, date: date(index), supplier, items: 3 + index % 6, amount: 45800 + (11 - index) * 7190, status: ["Por aprobar", "Confirmada", "Recibida", "En tránsito"][index % 4] })),
@@ -87,4 +99,4 @@ const data: Record<ErpCollection, ErpRecord[]> = {
   attendance: employees.map((employee, index) => ({ id: `ATT-${String(901 + index)}`, date: date(index), employee, department: ["Ventas", "Compras", "Contabilidad", "Almacén"][index % 4], checkIn: index % 4 === 0 ? "08:18" : "07:58", checkOut: "17:02", status: index % 4 === 0 ? "Tardanza" : "A tiempo" })),
 };
 
-export const demoErpProvider: ErpReadProvider = { list: (collection) => data[collection] };
+export const demoErpProvider: ErpReadProvider = { list: (collection) => collection === "posTickets" ? currentPosTickets() : data[collection] };

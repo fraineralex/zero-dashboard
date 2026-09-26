@@ -4,6 +4,7 @@ import { businessFidelityIssue } from "@/lib/erp/business-question";
 import { crossModuleFidelityIssue, dynamicFidelityIssue, semanticFidelityIssue } from "@/lib/erp/query";
 import { flexibleComparisonFidelityIssue } from "@/lib/erp/comparison";
 import { normalizeErpQuestion } from "@/lib/erp/question-language";
+import { requestedDateRange, requestedTimeRange, type BusinessPlan } from "@/lib/erp/business-question";
 import type { DashboardElement, DashboardSpec } from "@/types/analytics";
 
 const normalize = normalizeErpQuestion;
@@ -11,6 +12,15 @@ const rows = (element: DashboardElement | undefined) => Array.isArray(element?.p
 
 export function requestFidelityIssue(intent: string, spec: DashboardSpec): string | null {
   const value = normalize(intent);
+  const erpScoped = Boolean(spec.state?.erp || spec.state?.business);
+  const expectedRange = requestedDateRange(intent);
+  const businessPlan = (spec.state?.business as { plan?: BusinessPlan } | undefined)?.plan;
+  const expectedTime = requestedTimeRange(intent);
+  if (erpScoped && expectedTime && (businessPlan?.source !== "posTickets" || businessPlan.timeRange?.from !== expectedTime.from || businessPlan.timeRange?.to !== expectedTime.to)) return "La vista no filtra tickets POS por la hora exacta solicitada.";
+  if (erpScoped && /cajer[oa]s?/.test(value) && (businessPlan?.source !== "posTickets" || businessPlan.groupBy !== "cashier")) return "La vista no identifica ni compara a las cajeras.";
+  if (erpScoped && expectedRange && (businessPlan?.dateRange?.from !== expectedRange.from || businessPlan.dateRange.to !== expectedRange.to)) return "La vista no aplica el rango de fechas solicitado a los registros.";
+  if (erpScoped && /\b(?:promedio|media|average)\b/.test(value) && businessPlan?.measures[0]?.aggregation !== "average") return "La vista no calcula el promedio de los registros solicitados.";
+  if (erpScoped && /\b(?:unicos?|distintos?|diferentes?|unique)\b/.test(value) && businessPlan?.measures[0]?.aggregation !== "distinctCount") return "La vista no cuenta las entidades distintas solicitadas.";
   const businessIssue = businessFidelityIssue(intent, spec);
   if (businessIssue !== undefined) return businessIssue;
   const crossModuleIssue = crossModuleFidelityIssue(intent, spec);
